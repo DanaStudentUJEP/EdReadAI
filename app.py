@@ -8,7 +8,6 @@ import textwrap
 
 def normalizuj(text):
     """Odstraní extra mezery a zarovná odstavce."""
-    # strip konců řádků + nahradí vícenásobné prázdné řádky max dvěma
     t = textwrap.dedent(text).strip("\n ")
     return re.sub(r"\n{3,}", "\n\n", t)
 
@@ -46,7 +45,6 @@ def dramatizace_pro_rocnik(rocnik):
         ➜ Cíl: děti si uvědomí, že text řeší reálný problém (chuť × zdraví).
         """)
 
-    # fallback
     return "Zvol ročník, aby se zobrazila scénka."
 
 
@@ -76,7 +74,6 @@ def uvodni_popis_textu(rocnik):
 
 # ---------- VÝBĚR DŮLEŽITÝCH POJMŮ ----------
 
-# Pojmy, které jsou pro děti užitečné (pro karetní hru, cukrářství, zdravé jídlo...)
 POJMY_S_VYSVETLENIM = {
     # 3. třída / Karetní hra styl
     "přebít": "ve hře položit silnější kartu než ten před tebou.",
@@ -84,6 +81,7 @@ POJMY_S_VYSVETLENIM = {
     "recept": "návod krok za krokem, jak něco udělat.",
     "receptura": "přesný postup a suroviny podle kterých se má péct.",
     "kombinace karet": "karty, které položíš najednou, protože k sobě patří.",
+
     # 4. třída / Věnečky styl
     "výuční list": "doklad, že člověk vystudoval obor (třeba cukrář) a umí tu práci.",
     "sražený krém": "krém, který se nepovedl a má hrudky.",
@@ -93,6 +91,7 @@ POJMY_S_VYSVETLENIM = {
     "chemická pachuť": "divná umělá chuť, která nepůsobí jako opravdové jídlo.",
     "průmyslově vyráběné listové těsto": "kupované těsto z továrny, ne domácí.",
     "plundrové těsto": "těsto podobné listovému, vrstvené a máslové.",
+
     # 5. třída / Sladké mámení styl
     "nízkokalorický": "s menším množstvím kalorií (energie z jídla).",
     "obezita": "stav, kdy má člověk nadměrné množství tuku v těle.",
@@ -103,7 +102,7 @@ POJMY_S_VYSVETLENIM = {
     "cukrovinka": "sladkost, něco na mlsání (tyčinka, bonbón, čokoláda).",
 }
 
-# Slova, která NECHCEME ve slovníčku, i když jsou dlouhá
+# STOP slova, která ve slovníčku nechceme
 STOP_SLOVA = {
     "správným", "správně", "maximálně", "ochutnejte", "navíc",
     "škoda", "chutná", "dobrý", "dobře", "hezky", "hezčí",
@@ -113,8 +112,8 @@ STOP_SLOVA = {
     "průmyslově", "rostlinná", "jemně", "jemný"
 }
 
-# Delší pojmy (víceslovné), které chceme umět chytit jako celek
-VÍC SLOV_KANDIDÁTI = [
+# Delší spojení slov, která chceme brát jako jeden pojem
+VIC_SLOV_KANDIDATI = [
     "výuční list",
     "sražený krém",
     "odpalované těsto",
@@ -128,20 +127,20 @@ VÍC SLOV_KANDIDÁTI = [
 
 def vyber_pojmy_z_textu(text, max_pojmu=10):
     """
-    1) Podíváme se, jestli text obsahuje některé naše předpřipravené odbornější pojmy.
-    2) Doplníme delší podivnější slova (7+ znaků), která nejsou zakázaná.
-    3) Odstraníme duplicity.
+    1) Najdeme pojmy z našeho připraveného seznamu.
+    2) Doplníme delší neznámá slova (7+ znaků), která nejsou zakázaná.
+    3) Omezíme délku.
     """
     nalezene = []
 
     lt = text.lower()
 
-    # krok 1: víceslovné pojmy
-    for fraze in VÍC SLOV_KANDIDÁTI:
+    # 1) více-slovné pojmy
+    for fraze in VIC_SLOV_KANDIDATI:
         if fraze in lt and fraze not in nalezene:
             nalezene.append(fraze)
 
-    # krok 2: slova 7+ znaků
+    # 2) delší slova z textu
     slova = re.findall(r"[A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+", text)
     for s in slova:
         s_low = s.lower().strip(",. ")
@@ -149,27 +148,28 @@ def vyber_pojmy_z_textu(text, max_pojmu=10):
             if s_low not in nalezene:
                 nalezene.append(s_low)
 
-    # krok 3: omezíme počet
+    # 3) limit
     return nalezene[:max_pojmu]
 
 
 def vytvor_slovnicek_blok(text):
     """
-    Vrátí pěkný slovníček pro žáky:
+    Vrátí slovníček pro žáky:
     - pojem = jednoduché vysvětlení
-    - když vysvětlení neznáme, necháme prázdnou linku k doplnění ve třídě
+    - když vysvětlení neznám, nechám prázdnou linku
     """
     pojmy = vyber_pojmy_z_textu(text, max_pojmu=10)
 
     if not pojmy:
         return normalizuj("""
         📚 SLOVNÍČEK POJMŮ
-        (V tomto textu nejsou složitější pojmy. Učitel může dopsat své pojmy ručně.)
+        (V tomhle textu nejsou složitější pojmy. Učitel může dopsat svoje pojmy ručně.)
         """)
 
     radky = ["📚 SLOVNÍČEK POJMŮ"]
     for p in pojmy:
-        vysv = POJMY_S_VYSVETLENIM.get(p.strip(",. ").lower(), "")
+        klic = p.strip(",. ").lower()
+        vysv = POJMY_S_VYSVETLENIM.get(klic, "")
         if vysv:
             radky.append(f"- {p} = {vysv}")
         else:
@@ -183,12 +183,8 @@ def vytvor_slovnicek_blok(text):
 # ======================================================
 
 def otazky_3tr(vety):
-    """
-    Otázky pro 3. třídu – jednodušší, zaměřené na přímé porozumění textu,
-    kdo-co-proč a rozlišení názor / fakt na úplně základní úrovni.
-    """
-    v1 = vety[0] if len(vety) > 0 else ""
-    v2 = vety[1] if len(vety) > 1 else ""
+    v1 = vety[0] if len(vety) > 0 else "První věta textu."
+    v2 = vety[1] if len(vety) > 1 else "Další věta z textu."
 
     return normalizuj(f"""
     🧠 OTÁZKY A – Porozumím textu
@@ -200,8 +196,8 @@ def otazky_3tr(vety):
        ____________________________________________
 
     3) Které tvrzení podle textu NENÍ pravda?
-       A) {v1 if v1 else "První věta textu."}
-       B) {v2 if v2 else "Další důležitá věta z textu."}
+       A) {v1}
+       B) {v2}
        C) Tvrzení, které v textu vůbec nebylo.
        Odpověď: __________
 
@@ -223,11 +219,8 @@ def otazky_3tr(vety):
     Umím říct svůj názor.                         ✅ ano   🤔 trochu   ❌ ještě ne
     """)
 
+
 def otazky_4tr(vety):
-    """
-    Otázky pro 4. třídu – kvalita / hodnocení (Věnečky styl),
-    rozlišení faktu a názoru, posouzení kvality, argumentace.
-    """
     return normalizuj(f"""
     🧠 OTÁZKY A – Najdu to v textu
     1) Která věc / výrobek / varianta byla označená jako nejlepší?
@@ -263,12 +256,8 @@ def otazky_4tr(vety):
     Rozuměl/a jsem textu.                         ✅ ano   🤔 trochu   ❌ ještě ne
     """)
 
+
 def otazky_5tr(vety):
-    """
-    Otázky pro 5. třídu – to je styl 'Sladké mámení':
-    práce s informací, tabulkou/procenty (obecně formulováno),
-    interpretace a názor.
-    """
     v1 = vety[0] if len(vety) > 0 else "První hlavní tvrzení z textu."
     v2 = vety[1] if len(vety) > 1 else "Druhé důležité tvrzení z textu."
 
@@ -294,9 +283,9 @@ def otazky_5tr(vety):
        Odpověď: __________
 
     4) Označ Ano / Ne:
-       a) Více než polovina lidí dělá X.      Ano / Ne
-       b) Některé značky se kupují častěji než jiné.   Ano / Ne
-       c) Víme úplně přesně všechno o všech značkách.  Ano / Ne
+       a) Více než polovina lidí dělá X.                Ano / Ne
+       b) Některé značky se kupují častěji než jiné.     Ano / Ne
+       c) Víme úplně přesně všechno o všech značkách.    Ano / Ne
 
     💭 OTÁZKY C – Přemýšlím a hodnotím
     5) V textu se říká, že vědci „hledají recept na zlato“.
@@ -315,13 +304,8 @@ def otazky_5tr(vety):
     Umím napsat svůj názor a zdůvodnit ho.        ✅ ano   🤔 trochu   ❌ ještě ne
     """)
 
+
 def vygeneruj_otazky(rocnik, text):
-    """
-    Vybere správný set otázek pro ročník.
-    'text' použijeme jen k tomu, abychom vytáhli první věty
-    pro volby A/B u některých otázek (= působí to osobněji).
-    """
-    # rozseknout text na věty pro personalizaci A/B u některých otázek
     kandidati = re.split(r'(?<=[\.\?\!])\s+', text.strip())
     vety = [v.strip() for v in kandidati if len(v.strip()) > 0]
 
@@ -331,6 +315,7 @@ def vygeneruj_otazky(rocnik, text):
         return otazky_4tr(vety)
     if rocnik == "5. třída":
         return otazky_5tr(vety)
+
     return "OTÁZKY K TEXTU (nezvolen ročník)"
 
 
@@ -339,12 +324,6 @@ def vygeneruj_otazky(rocnik, text):
 # ======================================================
 
 def metodicky_list(rocnik, text):
-    """
-    Stylově vychází z METODICKÝ LIST PRO UČITELE, který používáš do DP.
-    Je univerzální: popisuje cíle, RVP, postup hodiny, sebehodnocení.
-    (Neobsahuje konkrétní řešení na body – protože ten text se může měnit.)
-    """
-
     if rocnik == "3. třída":
         nazev = "Porozumění návodu / pravidlům hry (EdRead AI, 3. ročník)"
         cile = [
@@ -423,7 +402,7 @@ def metodicky_list(rocnik, text):
       novinový článek, pravidla hry…).
     • Zvolí ročník (3., 4. nebo 5. třída).
     • Nástroj automaticky vytvoří:
-      – pracovní list pro žáky (se scénkou, čtením, slovníčkem, otázkami, sebehodnocením),
+      – pracovní list pro žáky (se scénkou, textem, slovníčkem, otázkami, sebehodnocením),
       – metodický list pro učitele (toto, co právě čtete).
     • Tohle pak lze:
       – zkopírovat do Wordu a vytisknout,
@@ -474,16 +453,6 @@ def metodicky_list(rocnik, text):
 # ======================================================
 
 def vytvor_pracovni_list(text, rocnik):
-    """
-    Finální list pro žáky:
-    - hlavička (jméno, třída, datum)
-    - dramatizace
-    - 'o čem je text'
-    - původní text (tak jak ho učitel vložil)
-    - slovníček pojmů
-    - otázky (A/B/C/sebehodnocení)
-    """
-
     hlavicka = normalizuj(f"""
     {rocnik} · Pracovní list (EdRead AI)
 
@@ -534,8 +503,8 @@ st.write(
     "2) Vyber ročník.\n"
     "3) Klikni na Vygenerovat.\n\n"
     "Dostaneš:\n"
-    "• krásně formátovaný pracovní list pro žáky (scénka, text, slovníček, otázky, sebehodnocení),\n"
-    "• samostatně metodický list pro učitele (cíle hodiny, RVP, postup hodiny...)."
+    "• pracovní list pro žáky (scénka, text, slovníček, otázky, sebehodnocení),\n"
+    "• metodický list pro učitele (cíle hodiny, RVP, průběh hodiny...)."
 )
 
 col_left, col_right = st.columns([1, 1])
@@ -565,7 +534,6 @@ if generuj:
     if len(vstup_text.strip()) == 0:
         st.error("Nejdřív vlož text 🙃")
     else:
-        # vytvoříme obsah
         student_sheet = vytvor_pracovni_list(vstup_text, rocnik)
         teacher_sheet = metodicky_list(rocnik, vstup_text)
 
@@ -575,7 +543,6 @@ if generuj:
         st.header("📘 Metodický list pro učitele (nezadávat žákům)")
         st.text(teacher_sheet)
 
-        # Umožníme stažení jako .txt soubory (ty si pak vložíš do Wordu / přiložíš do DP)
         st.download_button(
             label="⬇ Stáhnout pracovní list pro žáky (.txt)",
             data=student_sheet,
