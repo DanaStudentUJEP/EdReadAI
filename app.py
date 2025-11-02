@@ -1,603 +1,436 @@
 import streamlit as st
-import re
-import textwrap
-from io import BytesIO
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, Inches
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
+import textwrap
+import re
+import datetime
 
-# ======================================================
-# Pomocné: formátování textu
-# ======================================================
+############################################
+# 1) Pomocné funkce pro text
+############################################
 
-def normalizuj(text):
-    """Zarovná vícenásobné mezery a prázdné řádky."""
-    t = textwrap.dedent(text).strip("\n ")
-    t = re.sub(r"\n{3,}", "\n\n", t)
-    return t
+def ocisti_text(vstup):
+    """Základní čištění: odstraní vícenásobné mezery, sjednotí nové řádky."""
+    if not vstup:
+        return ""
+    t = vstup.replace("  ", " ").replace("\t", " ").strip()
+    return re.sub(r"\n{3,}", "\n\n", t)
 
-# ======================================================
-# DRAMATIZACE podle ročníku
-# ======================================================
+def zkrat_text_pro_rocnik(text, rocnik):
+    """
+    Lehké zjednodušení formulací pro mladší ročníky.
+    Neprzníme obsah, jen drobně lámeme věty na kratší úseky
+    u 3. a 4. třídy.
+    """
+    text = ocisti_text(text)
 
-def dramatizace_pro_rocnik(rocnik):
-    if rocnik == "3. třída":
-        return normalizuj("""
-        🎭 ÚVODNÍ SCÉNKA (začátek hodiny)
-        Anička: „Hele, já mám pravidla té nové hry a vůbec jim nerozumím!“
-        Marek: „Ukaž. Tady je napsané, kdo přebíjí koho. To je jako kdo je silnější.“
-        Učitelka: „Tak si to zkusíme zahrát nanečisto. Každý z vás bude jedno zvíře.
-        A uvidíme, kdo koho může přebít.“
-        
-        ➜ Cíl: děti si nejdřív prožijí situaci z textu, teprve potom text čtou.
-        """)
+    if rocnik in ["3", "4", "3. třída", "4. třída"]:
+        # vložíme tečky po delších souvětích, aby se to ve Wordu lépe četlo
+        text = re.sub(r", ale", ". Ale", text)
+        text = re.sub(r", protože", ". Protože", text)
+        text = re.sub(r", že", ". Říká, že", text)
+    return text
 
-    if rocnik == "4. třída":
-        return normalizuj("""
-        🎭 ÚVODNÍ SCÉNKA (začátek hodiny)
-        Učitelka: „Dnes budete jako porota v cukrářské soutěži.“
-        Eliška: „Já hodnotím, jak zákusek vypadá.“
-        Tomáš: „Já hodnotím chuť a vůni.“
-        Natálie: „Já hlídám, jestli cukrář nešidí suroviny.“
-        Učitelka: „Přesně takhle mluví i paní v našem textu. Budeme spolu zjišťovat,
-        co je dobré, co je slabé a proč.“
-        
-        ➜ Cíl: žáci hned pochopí, že text je o hodnocení kvality.
-        """)
+############################################
+# 2) Dramatizace pro úvod hodiny
+############################################
 
-    if rocnik == "5. třída":
-        return normalizuj("""
-        🎭 ÚVODNÍ SCÉNKA (začátek hodiny)
-        Eliška: „Víš, že lidi chtějí sladkosti s méně kaloriemi?“
-        Tomáš: „Mně je jedno, kolik to má kalorií. Hlavně když je to dobré.“
-        Natálka: „No právě o tom je náš text – sladkosti, zdraví a čísla z průzkumu.“
-        
-        ➜ Cíl: žáci hned vědí, že text řeší zdraví, cukr a to, co lidi kupují.
-        """)
+def dramatizace_template(rocnik):
+    """
+    Krátká scénka 'zahřívač' před čtením.
+    Má vtáhnout žáky do tématu.
+    Přizpůsobíme tón věku.
+    """
+    if rocnik in ["3", "3. třída"]:
+        return (
+            "DRAMATIZACE (začátek hodiny)\n"
+            "Učitelka: „Dneska budeme hodnotit věnečky jako opravdoví porotci.“\n"
+            "Tonda: „Můžu být ten, co ochutnává?“\n"
+            "Bára: „A můžu říkat, co je dobré a co ne?“\n"
+            "Učitelka: „Ano. Ale pozor – musíte to umět vysvětlit. Ne jen 'fuj' nebo 'mňam'.“\n"
+            "→ Cíl: děti si zahrají roli porotců. Přepnou se do módu ‚hodnotím a zdůvodňuju‘.\n"
+        )
+    if rocnik in ["4", "4. třída"]:
+        return (
+            "DRAMATIZACE (začátek hodiny)\n"
+            "Učitel: „Představte si, že jste v porotě televizní soutěže zákusků.“\n"
+            "Ema: „Takže můžu říct, že krém je hrudkovitý a že bys měl vrátit výuční list?“\n"
+            "Učitel: „Teoreticky ano… ale hlavně musíš říct PROČ si to myslíš.“\n"
+            "→ Cíl: žáci chápou, že nestačí říct názor. Musí ho umět obhájit.\n"
+        )
+    else:
+        return (
+            "DRAMATIZACE (začátek hodiny)\n"
+            "Učitel: „Budeme hodnotit kvalitu zákusků jako skuteční inspektoři.“\n"
+            "Žák 1: „To fakt existuje? Že někdo ochutnává zákusky jako práce?“\n"
+            "Učitel: „Ano. A musí to umět popsat odborně, ne jen říct 'dobrý' / 'nedobrý'.“\n"
+            "→ Cíl: uvědomit si roli hodnotitele a jazyk hodnocení (slovní zásoba, argumenty).\n"
+        )
 
-    return "Zvol třídu, aby se ukázala dramatizace."
+############################################
+# 3) Slovníček – výběr a jednoduché definice
+############################################
 
-
-# ======================================================
-# Úvodní vysvětlení textu dětem
-# ======================================================
-
-def uvodni_popis_textu(rocnik):
-    if rocnik == "3. třída":
-        return normalizuj("""
-        📖 O ČEM JE TEXT
-        Text vysvětluje pravidla (kdo smí co udělat, kdo je silnější, jak se správně hraje).
-        Tvým úkolem je porozumět tomu, jak hra funguje, a umět říct to vlastními slovy.
-        """)
-
-    if rocnik == "4. třída":
-        return normalizuj("""
-        📖 O ČEM JE TEXT
-        Text mluví o tom, jak někdo hodnotí zákusky a kvalitu jejich výroby.
-        Někdy jsou to FAKTA (dá se ověřit), někdy NÁZORY (osobní hodnocení).
-        Ty máš ukázat, že ten rozdíl poznáš.
-        """)
-
-    if rocnik == "5. třída":
-        return normalizuj("""
-        📖 O ČEM JE TEXT
-        Text řeší sladkosti, zdraví, kalorie a co lidé kupují.
-        Je tam i tabulka s čísly. Budeš číst informace, porovnávat je
-        a vysvětlovat, co z toho plyne.
-        """)
-
-    return "📖 Tento text budeme číst a rozumět mu."
-
-
-# ======================================================
-# Slovníček pojmů
-# ======================================================
-
-POJMY_S_VYSVETLENIM = {
-    # 3. třída / hry
-    "přebít": "položit silnější kartu než měl hráč před tebou",
-    "žolík": "speciální karta, která se může tvářit jako jakákoli jiná karta",
-    "receptura": "přesný předpis, jak se to má udělat a z čeho",
-    "kombinace karet": "víc karet, které se mají hrát spolu",
-
-    # 4. třída / věnečky
-    "výuční list": "doklad o tom, že někdo vystudoval obor (třeba cukrář)",
-    "sražený krém": "nepovedený krém, má hrudky",
-    "margarín": "tuk podobný máslu, levnější náhrada másla",
-    "korpus": "spodní část dortu nebo zákusku – samotné těsto",
-    "odpalované těsto": "těsto na větrníky / věnečky, má být duté a nadýchané",
-    "chemická pachuť": "divná umělá chuť",
-    "průmyslově vyráběné listové těsto": "kupované listové těsto z továrny",
-    "plundrové těsto": "těsto podobné listovému, máslové, vrstvené",
-
-    # 5. třída / sladkosti
-    "nízkokalorický": "s menším množstvím kalorií (energie z jídla)",
-    "obezita": "když má tělo nadměrně moc tuku",
-    "metabolismus": "jak tělo zpracovává jídlo a mění ho na energii",
-    "polysacharid": "složitý cukr, tělo ho tráví pomalu",
-    "transmastné kyseliny": "druhy tuků, které nejsou moc zdravé",
-    "energetická hodnota": "kolik energie ti jídlo dá (v kaloriích)",
+# Předpřipravené dětské definice obtížných slov, které se často objevují
+SLOVNIK_ZNAMA_SLOVA = {
+    "výuční list": "papír (diplom), že člověk vystudoval obor, třeba cukrář",
+    "sražený krém": "krém, který se nepovedl – má hrudky, není hladký",
+    "margarín": "levnější tuk podobný máslu",
+    "pachuť": "nepříjemná chuť v puse, která tam zůstane",
+    "korpus": "spodek nebo tělo dortu / zákusku – to upečené těsto",
+    "odpalované těsto": "těsto na větrníky nebo věnečky, má být duté a nadýchané",
+    "receptura": "přesný postup + suroviny, jak se to má správně dělat",
+    "pudink": "sladký krém z mléka a prášku, často žlutý",
+    "rum": "vůně / příchuť, dává se někdy do krému pro chuť",
+    "šlehačka": "našlehaná smetana, bílý nadýchaný krém",
+    "průmyslově vyráběné": "dělá se to ve velké továrně, ne doma ručně",
+    "porota": "lidi, kteří hodnotí a rozhodují, co je nejlepší",
+    "známka": "hodnocení jako ve škole (1 je nejlepší)",
 }
 
-STOP_SLOVA = {
-    "správným", "správně", "maximálně", "navíc", "škoda",
-    "chutná", "dobrý", "dobře", "hezky", "hezčí", "cítit",
-    "soustech", "sousto", "tvrdé", "měkká", "křupavá",
-    "zlatavá", "vláčná", "chemickou", "chemický", "chemická",
-    "přepečená", "zestárlá"
-}
-
-VIC_SLOV_KANDIDATI = [
-    "výuční list",
-    "sražený krém",
-    "odpalované těsto",
-    "chemická pachuť",
-    "průmyslově vyráběné listové těsto",
-    "plundrové těsto",
-    "transmastné kyseliny",
-    "energetická hodnota",
-]
-
-def vyber_pojmy_z_textu(text, max_pojmu=8):
+def najdi_kandidat_slov(text):
     """
-    1) zkusíme víceslovné pojmy
-    2) doplníme delší podezřelá slova (7+ znaků), bez těch co nechceme
+    Najde možná složitější výrazy:
+    - víceslovné odborné výrazy (např. 'sražený krém', 'odpalované těsto')
+    - delší slova (8+ znaků)
+    Pak to přefiltrujeme, aby to nebyly úplné nesmysly typu 'správným'.
     """
-    nalezene = []
-    lt = text.lower()
+    kandidati = set()
 
-    # víceslovné
-    for fraze in VIC_SLOV_KANDIDATI:
-        if fraze in lt and fraze not in nalezene:
-            nalezene.append(fraze)
+    # ručně zkusíme vytáhnout dvouslovné spojení typu "xxx xxx"
+    dvojice = re.findall(r"([A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+ [A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+)", text)
+    for d in dvojice:
+        low = d.lower()
+        if any(kl in low for kl in ["krém", "těsto", "výuční", "pachuť"]):
+            kandidati.add(low.strip())
 
     # delší jednotlivá slova
     slova = re.findall(r"[A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+", text)
     for s in slova:
         s_low = s.lower()
-        if len(s_low) >= 7 and s_low not in STOP_SLOVA:
-            if s_low not in nalezene:
-                nalezene.append(s_low)
-
-    return nalezene[:max_pojmu]
-
-def vytvor_slovnicek_blok(text):
-    pojmy = vyber_pojmy_z_textu(text, max_pojmu=8)
-
-    if not pojmy:
-        return normalizuj("""
-        📚 SLOVNÍČEK POJMŮ
-        (V tomto textu nejsou výrazně složitá slova. Učitel může dopsat vlastní.)
-        """)
-
-    radky = ["📚 SLOVNÍČEK POJMŮ"]
-    for p in pojmy:
-        klic = p.lower()
-        vysv = POJMY_S_VYSVETLENIM.get(klic, "")
-        if vysv:
-            radky.append(f"- {p} = {vysv}")
-        else:
-            radky.append(f"- {p} = ____________________________________________")
-    return "\n".join(radky)
-
-
-# ======================================================
-# OTÁZKY podle ročníku
-# ======================================================
-
-def otazky_3tr():
-    # U 3. třídy držíme jazyk velmi jednoduchý a stabilní
-    return normalizuj("""
-    🧠 OTÁZKY A – ROZUMÍM TEXTU
-    1) O čem ten text je?
-       ☐ O pravidlech hry
-       ☐ O včelách v přírodě
-       ☐ O tom, jak péct dort
-
-    2) Kdo je v textu důležitý?
-       (doplň jméno osoby / zvířete / věci z textu)
-       ______________________________________
-
-    3) Co se má podle textu dělat SPRÁVNĚ?
-       (např. jak se hraje, co je povolené)
-       ______________________________________
-       ______________________________________
-
-    4) Zaškrtni možnost, která v textu NENÍ.
-       ☐ Někdo něco vysvětluje nebo hodnotí.
-       ☐ Mluví se o tom, co je správně a co špatně.
-       ☐ Děti jedou na výlet do vesmíru.
-
-    💭 OTÁZKY B – PŘEMÝŠLÍM O TOM
-    5) Proč někdo něco v textu chválí nebo kritizuje?
-       „Líbí se mu / nelíbí se mu, protože…“
-       ______________________________________
-       ______________________________________
-
-    6) Najdi ve svém textu:
-       a) 1 větu, která je FAKT (dá se ověřit)
-          ___________________________________
-       b) 1 větu, která je NÁZOR (pocit / hodnocení)
-          ___________________________________
-
-    🌟 SEBEHODNOCENÍ
-    Rozuměl/a jsem textu.                🙂 / 😐 / 😕
-    Našel/la jsem správné odpovědi.      🙂 / 😐 / 😕
-    Umím říct vlastními slovy proč.      🙂 / 😐 / 😕
-    """)
-
-def otazky_4tr():
-    return normalizuj("""
-    🧠 OTÁZKY A – HLEDÁM V TEXTU
-    1) Který výrobek / věc byla hodnocena jako NEJLEPŠÍ? Proč?
-       ______________________________________
-       ______________________________________
-
-    2) Co bylo podle textu nejhorší? Co mu vadilo?
-       ______________________________________
-       ______________________________________
-
-    3) Co má mít dobrý výrobek, aby byl poctivý a kvalitní?
-       • _______________________________
-       • _______________________________
-       • _______________________________
-
-    🔍 OTÁZKY B – FAKT vs. NÁZOR
-    4) Najdi ve svém textu:
-       FAKT (dá se ověřit, změřit):
-       ______________________________________
-
-       NÁZOR (jak to někomu chutná / líbí se mu to):
-       ______________________________________
-
-    💬 OTÁZKY C – TVŮJ NÁZOR
-    5) Souhlasíš s hodnocením kvality v textu? Proč ano / proč ne?
-       ______________________________________
-       ______________________________________
-
-    🌟 SEBEHODNOCENÍ
-    Vím, co je FAKT a co je NÁZOR.        🙂 / 😐 / 😕
-    Umím vysvětlit, proč je něco dobré.  🙂 / 😐 / 😕
-    Rozuměl/a jsem textu.                🙂 / 😐 / 😕
-    """)
-
-def otazky_5tr():
-    return normalizuj("""
-    🧠 OTÁZKY A – HLAVNÍ MYŠLENKA
-    1) O čem text hlavně je?
-       ☐ O sladkostech, zdraví a kaloriích
-       ☐ O tom, jak opravit kolo
-       ☐ O stavbě hradu z písku
-
-    2) Proč lidé dnes řeší, kolik má jídlo cukru a tuku?
-       ______________________________________
-       ______________________________________
-
-    🔍 OTÁZKY B – PRÁCE S INFORMACÍ
-    3) V textu (nebo tabulce) jsou čísla v procentech.
-       Co znamená, když u něčeho bylo třeba „20 % lidí“?
-       ☐ Asi pětina lidí to jí / kupuje
-       ☐ Znamená to zákaz
-       ☐ Znamená to, že to nikomu nechutná
-
-    4) Označ Ano / Ne:
-       a) Některé výrobky se kupují častěji než jiné.      Ano / Ne
-       b) Víme přesně úplně vše o všech značkách.          Ano / Ne
-       c) Řeší se i zdraví a rizika (tuky, obezita).       Ano / Ne
-
-    💭 OTÁZKY C – PŘEMÝŠLÍM
-    5) V textu se říká, že vědci „hledají recept na zlato“.
-       Co to podle tebe znamená?
-       ______________________________________
-       ______________________________________
-
-    6) Co by sis vybral/a ty: rychlou sladkost (= rychlá energie),
-       nebo spíš zdravější možnost? Proč?
-       ______________________________________
-       ______________________________________
-
-    🌟 SEBEHODNOCENÍ
-    Umím vysvětlit, co je hlavní myšlenka textu.        🙂 / 😐 / 😕
-    Umím použít údaje z textu / tabulky.                🙂 / 😐 / 😕
-    Umím napsat vlastní názor a zdůvodnit ho.           🙂 / 😐 / 😕
-    """)
-
-def vygeneruj_otazky(rocnik):
-    if rocnik == "3. třída":
-        return otazky_3tr()
-    if rocnik == "4. třída":
-        return otazky_4tr()
-    if rocnik == "5. třída":
-        return otazky_5tr()
-    return "OTÁZKY K TEXTU"
-
-
-# ======================================================
-# Obrázková opora
-# ======================================================
-
-def obrazkova_opora(rocnik):
-    if rocnik == "3. třída":
-        return normalizuj("""
-        🖼 OBRÁZKOVÁ OPORA
-        • Nakresli šipky mezi zvířaty: kdo koho přebíjí (kdo je silnější).
-        • Nakresli kartičku „žolík“ a napiš, proč je zvláštní.
-        """)
-    if rocnik == "4. třída":
-        return normalizuj("""
-        🖼 OBRÁZKOVÁ OPORA
-        • Nakresli malou cedulku „Porota“ a vedle tři hvězdičky ⭐⭐⭐.
-        • Nakresli koláček / věneček a šipky k nápisům:
-          „vzhled“, „chuť“, „poctivé suroviny“.
-        """)
-    if rocnik == "5. třída":
-        return normalizuj("""
-        🖼 OBRÁZKOVÁ OPORA
-        • Nakresli tabulku s procenty a nad ni lupu 🔍.
-        • Nakresli srdce ❤️ a vedle něj nápis „zdraví“.
-        """)
-    return ""
-
-
-# ======================================================
-# Metodický list pro učitele (RVP ZV)
-# ======================================================
-
-def metodicky_list(rocnik, puvodni_text):
-    if rocnik == "3. třída":
-        nazev = "EdRead AI – Práce s jednoduchým návodem / pravidly hry (3. ročník ZŠ)"
-        cile = [
-            "Žák rozumí kratšímu textu s pravidly / postupem.",
-            "Žák vyhledá v textu konkrétní informaci (kdo, co, jak).",
-            "Žák začíná rozlišovat FAKT vs. NÁZOR.",
-            "Žák dokáže převyprávět pravidla vlastními slovy."
-        ]
-        rvp = (
-            "RVP ZV – Jazyk a jazyková komunikace:\n"
-            "• žák čte s porozuměním jednoduché texty (návod, pravidla hry),\n"
-            "• vyhledává v textu podstatnou informaci,\n"
-            "• reprodukuje text vlastními slovy."
-        )
-
-    elif rocnik == "4. třída":
-        nazev = "EdRead AI – Hodnocení kvality a rozlišení FAKT / NÁZOR (4. ročník ZŠ)"
-        cile = [
-            "Žák rozpozná rozdíl mezi FAKTEM (ověřitelným údajem) a NÁZOREM (hodnocení).",
-            "Žák rozumí tomu, podle jakých kritérií je něco hodnoceno (vzhled, chuť, poctivost).",
-            "Žák dokáže formulovat vlastní souhlas/nesouhlas a zdůvodnit ho.",
-        ]
-        rvp = (
-            "RVP ZV – Jazyk a jazyková komunikace:\n"
-            "• žák porovnává informace z různých částí textu,\n"
-            "• rozlišuje subjektivní hodnocení a objektivní sdělení,\n"
-            "• vyjadřuje svůj názor celou větou a zdůvodňuje ho."
-        )
-
-    else:
-        nazev = "EdRead AI – Práce s publicistickým textem a údaji v procentech (5. ročník ZŠ)"
-        cile = [
-            "Žák chápe hlavní sdělení publicistického / populárně naučného textu.",
-            "Žák pracuje s čísly a procenty v textu nebo tabulce.",
-            "Žák propojuje text se svým životem (zdraví, strava, volba).",
-            "Žák formuluje vlastní postoj a umí ho vysvětlit."
-        ]
-        rvp = (
-            "RVP ZV – Jazyk a jazyková komunikace:\n"
-            "• žák vyhledává a porovnává informace v souvislém i nesouvislém textu (tabulka, průzkum),\n"
-            "• interpretuje význam údajů (procenta, četnost),\n"
-            "• vyjadřuje a zdůvodňuje svůj názor k textu."
-        )
-
-    body_cile = "\n".join([f"- {c}" for c in cile])
-
-    postup = normalizuj("""
-    1) MOTIVACE / DRAMATIZACE (5–7 min)
-       Žáci sehrají krátkou scénku (viz DRAMATIZACE). Cíl: aby věděli, o čem text bude,
-       ještě před čtením.
-
-    2) ČTENÍ TEXTU (10–15 min)
-       Žáci čtou text (individuálně nebo hlasitě po odstavcích).
-       Podtrhají slova, kterým nerozumí.
-       Společně projdete slovníček pojmů.
-
-    3) PRÁCE S OTÁZKAMI (15–20 min)
-       Blok A = rozumím textu (vyhledám informaci).
-       Blok B = přemýšlím o textu (proč je něco dobře/špatně).
-       Blok C = můj názor (vysvětlím, proč si to myslím já).
-       Sleduj, jestli dítě odpovídá s oporou v textu, nebo „tipuje“.
-
-    4) SEBEHODNOCENÍ (5 min)
-       Žáci vyplní vlastní reflexi (🙂 / 😐 / 😕).
-       Učitel si může dělat poznámky k dalšímu rozvoji čtenářské gramotnosti.
-    """)
-
-    obrazky = obrazkova_opora(rocnik)
-
-    digital = normalizuj("""
-    DIGITÁLNÍ VARIANTA (EdRead AI)
-    • Učitel vloží libovolný text do EdRead AI.
-    • Vybere ročník (3., 4. nebo 5. třída).
-    • Nástroj automaticky vytvoří:
-      – pracovní list pro žáka (text + slovníček + otázky + sebehodnocení),
-      – metodický list pro učitele (cíle, RVP, průběh hodiny, reflexe).
-    • List lze stáhnout jako .docx a archivovat jako důkaz podpory čtenářské gramotnosti
-      a individualizace výuky v souladu s RVP ZV.
-    """)
-
-    vystup = normalizuj(f"""
-    METODICKÝ LIST PRO UČITELE
-    {nazev}
-
-    VAZBA NA RVP ZV
-    {rvp}
-
-    CÍLE HODINY
-    {body_cile}
-
-    ČASOVÁ DOTACE
-    1 vyučovací hodina (45 minut)
-
-    POTŘEBNÉ POMŮCKY
-    • Pracovní list pro žáka
-    • Text k úloze (tištěný / na tabuli)
-    • Tužka, zvýrazňovač
-    • (Volitelně) počítač / tablet – digitální vyplnění
-
-    POPIS HODINY KROK ZA KROKEM
-    {postup}
-
-    OBRÁZKOVÁ OPORA / PIKTOGRAMY
-    {obrazky}
-
-    POZNÁMKY UČITELE PRO ZÁZNAM (REFLEXE HODINY)
-    • Co šlo dětem snadno?
-    • Kde tápaly?
-    • Kdo měl potíž pochopit zadání otázky?
-    • Jak děti mluvily o faktu a názoru?
-    • Jak hodnotily samy sebe (🙂 / 😐 / 😕)?
-
-    {digital}
-
-    (Vytvořeno pomocí EdRead AI – nástroj na podporu čtenářské gramotnosti.)
-    """)
-    return vystup
-
-
-# ======================================================
-# Sestavení pracovního listu pro žáky (text + všechno kolem)
-# ======================================================
-
-def vytvor_pracovni_list(text, rocnik):
-    hlavicka = normalizuj(f"""
-    {rocnik} · Pracovní list (EdRead AI)
-
-    Jméno: ______________________      Třída: __________      Datum: __________
-    """)
-
-    scenka = dramatizace_pro_rocnik(rocnik)
-    uvod = uvodni_popis_textu(rocnik)
-    slovnicek = vytvor_slovnicek_blok(text)
-    otazky = vygeneruj_otazky(rocnik)
-    obrazky = obrazkova_opora(rocnik)
-
-    cele = normalizuj(f"""
-    {hlavicka}
-
-    {scenka}
-
-    {uvod}
-
-    📖 TEXT K PŘEČTENÍ
-    {text.strip()}
-
-    {slovnicek}
-
-    {otazky}
-
-    {obrazky}
-
-    ────────────────────────────
-    Vytvořeno pomocí EdRead AI · Rozvoj čtenářské gramotnosti · Strana 1
-    """)
-
-    return cele
-
-
-# ======================================================
-# Pomocné: vytvoření .docx souboru z textu
-# ======================================================
-
-def vytvor_docx(zneni_textu, nazev_dokumentu):
+        if len(s_low) >= 8:
+            kandidati.add(s_low)
+
+    # Doplníme naše známé (aby tam byly jistě klíčové výrazy)
+    for k in SLOVNIK_ZNAMA_SLOVA.keys():
+        if k in text.lower():
+            kandidati.add(k)
+
+    # vyčistíme, aby tam nebyly běžné/lehké tvary
+    pryc = {"správným", "maximálně", "dalšího", "ochutnejte"}
+    konec = [w for w in kandidati if w not in pryc]
+
+    # vezmeme max 10
+    konec = konec[:10]
+    return konec
+
+def vysvetli_slovo(slovo):
+    """
+    Vrátí jednoduché vysvětlení pro děti.
+    Pokud máme připravené, vezmeme ho. Jinak dáme čáru k doplnění.
+    """
+    if slovo in SLOVNIK_ZNAMA_SLOVA:
+        return SLOVNIK_ZNAMA_SLOVA[slovo]
+    # pokusíme se chytnout dvouslovné spojení jako 'sražený krém'
+    for k in SLOVNIK_ZNAMA_SLOVA:
+        if slovo.strip().lower() == k.lower():
+            return SLOVNIK_ZNAMA_SLOVA[k]
+
+    return "_______________________________"
+
+def vytvor_slovnicek_pro_text(text):
+    slova = najdi_kandidat_slov(text)
+    polozky = []
+    for s in slova:
+        polozky.append((s, vysvetli_slovo(s)))
+    return polozky
+
+############################################
+# 4) Otázky pro žáky
+############################################
+
+def otazky_pro_zaky(rocnik):
+    """
+    Vrací strukturované otázky (A / B / C),
+    které se zapíšou do pracovního listu.
+    Tyhle otázky jsou univerzální k hodnoticímu textu typu „Věnečky“,
+    ale fungují i pro jiný hodnoticí/porovnávací text.
+    """
+    qA = [
+        "1) Najdi v textu: Který výrobek (věneček / sladkost / výrobek) dopadl NEJLÉPE? Napiš číslo nebo název.",
+        "2) Najdi v textu: Který výrobek dopadl NEJHŮŘE? Proč?",
+        "3) Které tvrzení podle textu NENÍ pravda?\n   A) Hodnotitel(ka) vysvětluje, proč se jí něco nelíbí.\n   B) V textu se porovnává kvalita různých výrobků.\n   C) V textu je recept krok za krokem, jak věneček upéct doma.",
+    ]
+
+    qB = [
+        "4) Vysvětli vlastními slovy: Co znamená, že krém je 'sražený'?",
+        "5) Proč někdo v textu říká, že by 'vrátil výuční list'? Co tím chce říct?",
+        "6) Najdi ve svém textu:\n   a) jednu větu, která je FAKT (dá se ověřit),\n   b) jednu větu, která je NÁZOR (pocit, hodnocení).",
+    ]
+
+    qC = [
+        "7) Souhlasíš s hodnocením (kdo je nejlepší)? Proč ano / proč ne?",
+        "8) Který z hodnocených výrobků bys TY chtěl/a ochutnat a proč?",
+    ]
+
+    sebehod = (
+        "SEBEHODNOCENÍ ŽÁKA\n"
+        "Označ, jak se cítíš po práci s textem:\n\n"
+        "Rozuměl/a jsem textu.                😃 / 🙂 / 😐\n"
+        "Našel/la jsem odpovědi v textu.       😃 / 🙂 / 😐\n"
+        "Umím to říct vlastními slovy.         😃 / 🙂 / 😐\n"
+    )
+
+    return qA, qB, qC, sebehod
+
+############################################
+# 5) Metodický list pro učitele
+############################################
+
+def metodicky_list(rocnik):
+    """
+    Stručný metodický list (1 strana),
+    který se uloží za pracovní list do stejného Wordu.
+    Obsahuje:
+    - cíle hodiny
+    - vazbu na RVP ZV
+    - doporučený průběh
+    - co sledovat u žáků
+    """
+    return (
+        "METODICKÝ LIST PRO UČITELE\n\n"
+        "Téma hodiny:\n"
+        "Porozumění hodnoticímu / publicistickému textu (ochutnávka, porota, srovnávání kvality výrobků).\n\n"
+        "Ročník: " + rocnik + ". třída\n\n"
+        "Vazba na RVP ZV (Jazyk a jazyková komunikace – Český jazyk a literatura):\n"
+        "• Žák porozumí smyslu přečteného textu.\n"
+        "• Žák vyhledává konkrétní informaci v textu.\n"
+        "• Žák rozlišuje fakt a názor v jednoduchém publicistickém / hodnoticím textu.\n"
+        "• Žák dokáže stručně formulovat vlastní názor a zdůvodnit ho.\n\n"
+        "Cíle hodiny:\n"
+        "1. Žák rozumí, co se v textu hodnotí a proč.\n"
+        "2. Žák umí dohledat konkrétní údaj (nejlepší, nejhorší, cena…).\n"
+        "3. Žák dokáže vysvětlit odborné/slabě odborné pojmy vlastními slovy ('sražený krém', 'výuční list').\n"
+        "4. Žák rozezná rozdíl mezi FAKTEM a NÁZOREM.\n"
+        "5. Žák sebereflektuje – jak tomu rozuměl, co pro něj bylo těžké.\n\n"
+        "Doporučený průběh (45 min):\n"
+        "1) MOTIVACE / DRAMATIZACE (cca 5 min)\n"
+        "   - Učitel přečte dramatizaci nahlas s dětmi v rolích.\n"
+        "   - Děti pochopí situaci: někdo hodnotí kvalitu výrobku.\n\n"
+        "2) ČTENÍ TEXTU (cca 10–15 min)\n"
+        "   - Společné čtení nebo čtení po dvojicích.\n"
+        "   - Učitel vysvětluje těžší slova pomocí slovníčku.\n"
+        "   - Obrázková opora: ukázka věnečku, medaile 1.–3. místo.\n\n"
+        "3) PRÁCE S OTÁZKAMI (cca 15 min)\n"
+        "   A – najdi informaci v textu,\n"
+        "   B – vysvětli/zdůvodni,\n"
+        "   C – tvůj názor.\n"
+        "   Učitel sleduje, jestli žák cituje text, nebo si vymýšlí mimo text.\n\n"
+        "4) SEBEHODNOCENÍ (cca 5 min)\n"
+        "   - Žáci vyberou smajlík a řeknou 1 větou proč.\n\n"
+        "Diferenciace / podpora:\n"
+        "• Slabší čtenář může text dostat se zvýrazněnými (tučně) klíčovými větami.\n"
+        "• Silnější čtenář může doplnit vlastní mini-recenzi: 'Jak bych hodnotil já'.\n\n"
+        "Poznámka k evaluaci:\n"
+        "Tyto výstupy (otázky A/B/C + sebehodnocení) slouží jako doklad rozvoje čtenářské gramotnosti pro praxi a pro diplomovou práci.\n"
+    )
+
+############################################
+# 6) Obrázková opora – generování obrázků
+############################################
+
+def nakresli_venecek_obr():
+    """
+    Vytvoří jednoduchý obrázek 'věnečku':
+    žlutý střed + béžový kroužek. Je to simbolická opora, ne výtvarné dílo :-)
+    Vrací Pillow Image.
+    """
+    img = Image.new("RGB", (300, 200), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    # kroužek (těsto)
+    draw.ellipse((60, 40, 240, 180), fill=(230, 200, 150), outline=(130, 90, 40), width=4)
+
+    # střed (krém)
+    draw.ellipse((110, 90, 190, 160), fill=(255, 235, 120), outline=(180, 150, 60), width=3)
+
+    # popisek
+    draw.text((70, 10), "Věneček (pohled shora)", fill=(0, 0, 0))
+    return img
+
+def nakresli_medaile_obr():
+    """
+    Jednoduchá medaile '1. místo' – vizuální podpora žebříčku kvality.
+    """
+    img = Image.new("RGB", (300, 200), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    draw.ellipse((80, 30, 220, 170), fill=(255, 215, 0), outline=(150, 120, 0), width=4)
+    draw.text((130, 85), "1.", fill=(0, 0, 0))
+    draw.text((110, 150), "místo", fill=(0, 0, 0))
+
+    return img
+
+############################################
+# 7) Generování Word dokumentu
+############################################
+
+def vytvor_word_dokument(
+    text_zaky,
+    rocnik,
+    dramatizace,
+    slovnicek,
+    qA, qB, qC, sebehodnoceni,
+    metodika_text
+):
+    """
+    Sestaví finální .docx do paměti (BytesIO) a vrátí ho.
+    """
     doc = Document()
-    style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Calibri'
-    font.size = Pt(11)
 
-    for blok in zneni_textu.split("\n\n"):
-        p = doc.add_paragraph(blok)
-        p_format = p.paragraph_format
-        p_format.space_after = Pt(6)
+    # Styl základního textu (písmo, velikost)
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(12)
 
+    # HLAVIČKA
+    nadpis = doc.add_heading(f"{rocnik}. třída · Pracovní list (EdRead AI)", level=1)
+    nadpis.alignment = 0
+    info_radek = doc.add_paragraph(
+        "Jméno: ______________________      Třída: __________      Datum: __________"
+    )
+    info_radek.space_after = Pt(12)
+
+    # DRAMATIZACE
+    doc.add_heading("🎭 Úvodní scénka (začátek hodiny)", level=2)
+    for line in dramatizace.split("\n"):
+        doc.add_paragraph(line)
+
+    # O ČEM JE TEXT
+    doc.add_heading("📖 O čem je text", level=2)
+    doc.add_paragraph(
+        "V textu někdo hodnotí výrobky (třeba zákusky) a vysvětluje, co je dobré a co je špatné. "
+        "Tvým úkolem je pochopit hodnocení a umět ho říct vlastními slovy."
+    )
+
+    # TEXT K PŘEČTENÍ
+    doc.add_heading("📖 Text k přečtení", level=2)
+    text_clean = zkrat_text_pro_rocnik(text_zaky, rocnik)
+    for odst in text_clean.split("\n"):
+        if odst.strip():
+            p = doc.add_paragraph(odst.strip())
+            p.space_after = Pt(6)
+
+    # SLOVNÍČEK
+    doc.add_heading("📚 Slovníček pojmů (pomoc při čtení)", level=2)
+    doc.add_paragraph("Tahle slova mohou být těžší. Vysvětlení je dětsky a jednoduše:")
+    for slovo, vysv in slovnicek:
+        para = doc.add_paragraph(style="List Bullet")
+        para.add_run(f"{slovo} = {vysv}")
+
+    # OBRÁZKOVÁ OPORA
+    doc.add_heading("🖼 Obrázková opora k textu", level=2)
+    doc.add_paragraph("Pomůcka: Jak vypadá věneček a co znamená '1. místo' v hodnocení:")
+
+    venecek_img = nakresli_venecek_obr()
+    medaile_img = nakresli_medaile_obr()
+
+    # Uložíme provizorně do paměti a vložíme
+    venecek_bytes = BytesIO()
+    venecek_img.save(venecek_bytes, format="PNG")
+    venecek_bytes.seek(0)
+    doc.add_picture(venecek_bytes, width=Inches(2.0))
+
+    medaile_bytes = BytesIO()
+    medaile_img.save(medaile_bytes, format="PNG")
+    medaile_bytes.seek(0)
+    doc.add_picture(medaile_bytes, width=Inches(2.0))
+
+    # OTÁZKY – A / B / C
+    doc.add_heading("🧠 OTÁZKY A – Rozumím textu", level=2)
+    for q in qA:
+        doc.add_paragraph(q, style="List Number")
+
+    doc.add_heading("💭 OTÁZKY B – Př Nacházím a vysvětluji", level=2)
+    for q in qB:
+        doc.add_paragraph(q, style="List Number")
+
+    doc.add_heading("🌟 OTÁZKY C – Můj názor", level=2)
+    for q in qC:
+        doc.add_paragraph(q, style="List Number")
+
+    # SEBEHODNOCENÍ
+    doc.add_heading("📝 Sebehodnocení žáka", level=2)
+    for line in sebehodnoceni.split("\n"):
+        doc.add_paragraph(line)
+
+    # ODDĚLENÍ STRAN
+    doc.add_page_break()
+
+    # METODICKÝ LIST PRO UČITELE
+    doc.add_heading("📘 METODICKÝ LIST PRO UČITELE", level=1)
+    for odst in metodika_text.split("\n"):
+        if odst.strip():
+            p = doc.add_paragraph(odst.strip())
+            p.space_after = Pt(6)
+        else:
+            doc.add_paragraph("")
+
+    # ULOŽENÍ DO PAMĚTI
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
-    return buffer, nazev_dokumentu
+    return buffer
 
 
-# ======================================================
-# STREAMLIT UI
-# ======================================================
+############################################
+# 8) STREAMLIT UI
+############################################
 
-st.set_page_config(
-    page_title="EdRead AI",
-    page_icon="📖",
-    layout="wide"
-)
+st.set_page_config(page_title="EdRead AI – pracovní list", layout="wide")
 
-st.title("EdRead AI – prototyp nástroje pro rozvoj čtenářské gramotnosti")
-st.write(
-    "Tento nástroj je připraven pro diplomovou práci.\n\n"
-    "1) Vlož původní text (např. Věnečky, Sladké mámení, Karetní hra).\n"
-    "2) Vyber ročník.\n"
-    "3) Klikni na Vygenerovat.\n\n"
-    "Výstup:\n"
-    "• Pracovní list pro žáky (dramatizace na úvod hodiny, text, slovníček, otázky, obrázková opora, sebehodnocení).\n"
-    "• Metodický list pro učitele (cíle hodiny, vazba na RVP ZV, postup hodiny, reflexe).\n"
-    "Oba dokumenty si stáhneš rovnou jako .docx."
-)
+st.title("EdRead AI – generátor pracovních listů")
+st.write("Prototyp pro diplomovou práci: rozvoj čtenářské gramotnosti podle RVP ZV.")
 
-col_left, col_right = st.columns([1, 1])
+st.markdown("**Krok 1.** Vlož text (např. Věnečky).")
+vstup_text = st.text_area("Vstupní text pro žáky", height=350, placeholder="Sem vlož celý text, se kterým chcete pracovat...")
 
-with col_left:
-    st.subheader("1. Vlož text pro žáky")
-    vstup_text = st.text_area(
-        "Sem vlož celý text (např. Věnečky, Sladké mámení, Karetní hra…) – přesně tak, jak ho chceš dát dětem ke čtení.",
-        height=400,
-        placeholder="Zkopíruj sem původní text..."
-    )
+st.markdown("**Krok 2.** Vyber ročník (kvůli slovní zásobě a typu otázek).")
+rocnik = st.selectbox("Ročník", ["3", "4", "5"])
 
-with col_right:
-    st.subheader("2. Vyber ročník / obtížnost")
-    rocnik = st.selectbox(
-        "Pro jakou třídu je list určen?",
-        ["3. třída", "4. třída", "5. třída"]
-    )
-
-    generuj = st.button("📄 Vygenerovat pracovní list pro žáky + metodiku pro učitele")
-
-st.markdown("---")
-
-if generuj:
-    if len(vstup_text.strip()) == 0:
-        st.error("Nejdřív vlož text 🙃")
+if st.button("Vytvořit pracovní list (.docx)"):
+    if not vstup_text.strip():
+        st.error("Nejdřív vlož text 🙂")
     else:
-        # vygeneruj textové bloky
-        student_sheet = vytvor_pracovni_list(vstup_text, rocnik)
-        teacher_sheet = metodicky_list(rocnik, vstup_text)
+        # připravíme části
+        draz = dramatizace_template(rocnik)
+        slovnik = vytvor_slovnicek_pro_text(vstup_text)
+        qA, qB, qC, sebehod = otazky_pro_zaky(rocnik)
+        metodika = metodicky_list(rocnik)
 
-        st.header("📄 Pracovní list pro žáky (náhled)")
-        st.text(student_sheet)
-
-        st.header("📘 Metodický list pro učitele (náhled)")
-        st.text(teacher_sheet)
-
-        # udělat .docx soubory
-        stud_buf, stud_name = vytvor_docx(student_sheet, "pracovni_list_EdReadAI.docx")
-        teach_buf, teach_name = vytvor_docx(teacher_sheet, "metodicky_list_EdReadAI.docx")
-
-        st.download_button(
-            label="⬇ Stáhnout pracovní list (.docx)",
-            data=stud_buf,
-            file_name=stud_name,
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        # vytvořit word
+        word_bytes = vytvor_word_dokument(
+            text_zaky=vstup_text,
+            rocnik=rocnik,
+            dramatizace=draz,
+            slovnicek=slovnik,
+            qA=qA, qB=qB, qC=qC,
+            sebehodnoceni=sebehod,
+            metodika_text=metodika
         )
 
+        # pojmenujeme soubor
+        dnes = datetime.date.today().isoformat()
+        filename = f"pracovni_list_EdReadAI_{rocnik}trida_{dnes}.docx"
+
+        st.success("Hotovo. Stáhni si pracovní list a můžeš tisknout 👍")
         st.download_button(
-            label="⬇ Stáhnout metodický list (.docx)",
-            data=teach_buf,
-            file_name=teach_name,
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            label="⬇️ Stáhnout .docx",
+            data=word_bytes,
+            file_name=filename,
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
 
-else:
-    st.info("Až vložíš text a vybereš ročník, klikni nahoře na tlačítko 📄.")
+        st.info("Soubor obsahuje: dramatizaci, text k práci, slovníček, otázky A/B/C, sebehodnocení a metodický list pro učitele (RVP ZV). Obrázková opora je vložena automaticky.")
