@@ -7,125 +7,111 @@ import re
 
 
 # =========================
-# Pomocné funkce
+#  1. Pomocné funkce
 # =========================
 
-def detekuj_tridu(volba_tridy):
-    """Vrátí číslo třídy jako int (3,4,5...)."""
+def detekuj_tridu(volba_tridy: str) -> int:
+    """Vrátí číslo ročníku jako int (3, 4, 5)."""
     try:
         return int(volba_tridy)
     except:
-        return None
+        return 0
 
 
-def priprav_dramatizaci(trida):
-    """Krátká úvodní scénka jako motivace (zahájení hodiny)."""
-    if trida <= 3:
+def priprav_dramatizaci(trida: int):
+    """Krátká motivační scénka na začátek hodiny podle ročníku."""
+    if trida == 3:
         return [
-            'Učitel: „Mám tu novou hru. Kdo ji umí vysvětlit?”',
-            'Adam: „Já ne, ty pravidla jsou nějak složitá…”',
-            'Ema: „Možná stačí pochopit, kdo přebíjí koho.”',
-            'Učitel: „Tak si to spolu zkusíme zahrát a k tomu budeme číst text.”',
-            '→ Cíl: děti mají chuť číst návod a pochopit pravidla.'
+            "Učitel: „Mám tu novou karetní hru. Kdo ví, jak se hraje?“",
+            "Adam: „Já tomu vůbec nerozumím… tady píšou o přebíjení.“",
+            "Ema: „Tak si to přečteme a zkusíme zahrát. Já budu liška!“",
+            "→ Cíl: děti mají chuť pochopit návod ke hře."
         ]
     elif trida == 4:
         return [
-            'Učitel: „Představte si, že jste porota v soutěži zákusků.”',
-            'Ema: „Takže já můžu říct, že krém je hrozný?”',
-            'Učitel: „Můžeš, ale musíš také vysvětlit proč.”',
-            '→ Cíl: děti chápou rozdíl mezi názorem a odůvodněním.'
+            "Učitel: „Dneska jste porota cukrářské soutěže.“",
+            "Ema: „Můžu říct, že krém je špatný?“",
+            "Učitel: „Můžeš, ale musíš říct proč. To je rozdíl mezi názorem a důvodem.“",
+            "→ Cíl: děti vidí, že text hodnotí kvalitu výrobků a musí to umět zdůvodnit."
         ]
     else:  # 5. třída
         return [
-            'Učitel: „Představte si reklamu na čokoládu a článek o čokoládě.”',
-            'Tonda: „Reklama chce, abych to koupil.”',
-            'Lenka: „A článek říká, co je zdravé a co ne.”',
-            'Učitel: „Přesně. Dneska čteme ten článek.”',
-            '→ Cíl: žáci uvidí rozdíl mezi informací a přesvědčováním.'
+            "Učitel: „Představte si dva typy textů: reklama na čokoládu vs. článek o čokoládě.“",
+            "Tonda: „Reklama chce, abych to koupil.“",
+            "Lenka: „A článek řeší, co je zdravé?“",
+            "Učitel: „Ano. My dnes čteme článek, ne reklamu.“",
+            "→ Cíl: žáci chápou, že text informuje, neprodává."
         ]
 
 
-def priprav_uvod_pro_zaka(trida):
-    """Krátké vysvětlení 'o čem je text', pro děti dané třídy."""
-    if trida <= 3:
+def priprav_uvod_pro_zaka(trida: int) -> str:
+    """Krátké vysvětlení pro děti: O čem je text / proč ho čteme."""
+    if trida == 3:
         return (
-            "V tomhle textu najdeš popis hry. Naučíš se pravidla, "
-            "kdo je silnější a jak vyhrát. Budeš odpovídat na otázky přímo z textu."
+            "V tomhle textu se vysvětluje hra a její pravidla. "
+            "Naučíš se, kdo je silnější a jak můžeš vyhrát. "
+            "Budeš hledat informace přímo v textu."
         )
     elif trida == 4:
         return (
-            "V tomhle textu někdo hodnotí zákusky (věnečky). Říká, co je dobré "
-            "a co je špatné. Ty se naučíš najít fakta v textu, poznat názor "
-            "a říct svůj vlastní názor."
+            "V tomhle textu někdo hodnotí zákusky (věnečky). Říká, co je dobré a co je špatné. "
+            "Ty se naučíš najít fakta v textu, poznat názor a říct svůj vlastní názor."
         )
     else:
         return (
             "Tento text mluví o sladkostech, zdraví a o tom, co lidé opravdu jedí. "
-            "Budeš hledat informace, porovnávat, co je pravda, a přemýšlet, co si myslíš ty."
+            "Budeš hledat údaje, porovnávat tvrzení a přemýšlet, co si o tom myslíš ty."
         )
 
 
-# -------------------------
-#  SLOVNÍČEK
-# -------------------------
+# =========================
+#  2. Slovníček
+# =========================
 
-# Slovník častých výrazů z našich typů textů (karetní hra, věnečky, sladké mámení).
-# Klíč = kořen/slovo v malých písmenech. Hodnota = dětské vysvětlení.
+# Malý „dětský slovník“ výrazů, které se často objevují v textech
+# (karetní hra / věnečky / sladké mámení).
+# Klíč = kořen slova (bez diakritiky tady řešit nemusíme, jen malá písmena),
+# Hodnota = vysvětlení pro dítě.
 SLOVNIK_VYRAZU = {
-    # Karetní hra / pravidla
-    "přebí": "být silnější než karta před tebou (porazit ji).",
-    "kombinace": "víc stejných karet zahraných najednou.",
-    "žolík": "speciální karta, může dělat jako jiná karta.",
-    "chameleon": "speciální karta, která se počítá jako jiné zvíře.",
-    "pravidl": "co se smí a nesmí dělat během hry.",
-    "kolo": "část hry, kdy všichni hrají postupně po sobě.",
-    "pass": "řeknu ‚pass‘ = teď nehraju, vynechávám tah.",
-    # Věnečky / cukrář
-    "sražen": "pokazilo se to, jsou v tom hrudky.",
+    # Karetní hra / pravidla hry
+    "přebí": "porazit jinou kartu (ukázat silnější kartu).",
+    "kombinace": "více stejných karet zahraných najednou.",
+    "žolík": "speciální karta, která se může tvářit jako jakákoli jiná karta.",
+    "chameleon": "karta, která se počítá jako jiná karta (pomůže ti vyhrát).",
+    "pravidl": "co se smí a nesmí dělat při hře.",
+    "kolo": "část hry, kdy postupně hrají všichni hráči.",
+    "pass": "hráč řekne „pass“, a ten tah vynechá (teď nehraje).",
+
+    # Věnečky / cukrařina
+    "sražen": "krém se pokazil a jsou v něm hrudky.",
     "margar": "tuk podobný máslu.",
-    "odpalovan": "těsto na věnečky/větrníky, má být nadýchané.",
-    "korpus": "spodní část zákusku, těsto.",
-    "receptur": "přesný postup a suroviny podle receptu.",
-    "výuční": "papír, že je někdo vyučený cukrář / řemeslník.",
-    "chemick": "umělá, nepřirozená chuť.",
-    "pachuť": "chuť po jídle, která zůstane v puse.",
-    "zestárl": "už to není čerstvé, je to tvrdé / suché.",
+    "odpalovan": "těsto na věneček nebo větrník, má být nadýchané a měkké.",
+    "korpus": "spodní nebo vnější část zákusku (těsto).",
+    "receptur": "správný postup a suroviny podle receptu.",
+    "výuční": "papír, kterým se dokazuje, že je někdo vyučený (má řemeslo).",
+    "chemick": "umělá chuť, není to čerstvé a přirozené.",
+    "pachuť": "chuť, která zůstane v puse po jídle.",
+    "zestárl": "už to není čerstvé, je to tvrdé a staré.",
+    "připečen": "moc pečené, skoro spálené, tvrdé.",
+
     # Sladké mámení / výživa
-    "nízkokalor": "málo kalorií = méně energie z jídla.",
-    "obezit": "když má člověk moc tělesného tuku, je to už nezdravé.",
-    "metabol": "jak tělo mění jídlo na energii pro nás.",
-    "polysachar": "složité cukry – energie se uvolňuje pomalu (třeba vláknina).",
-    "jednoduché cukr": "rychlý cukr, energia hned (třeba hroznový cukr).",
-    "energetick": "kolik energie (kalorií) v jídle je.",
-    "light": "verze jídla s méně cukru nebo méně tuku.",
+    "nízkokalor": "málo kalorií (jídlo, po kterém tolik nepřibírám).",
+    "obezit": "nezdravě vysoká tělesná hmotnost (člověk má nadváhu).",
+    "metabol": "to, jak tělo zpracovává jídlo na energii.",
+    "polysachar": "složitý cukr, energie se uvolňuje pomalu (např. vláknina).",
+    "jednoduché": "rychlý cukr, energie hned (třeba hroznový cukr).",
+    "energet": "kolik energie (kalorií) jídlo má.",
+    "light": "verze jídla s méně cukru nebo méně tuku."
 }
 
-def najdi_jednoduche_vysvetleni(slovo_lower, trida):
-    """
-    Zkusíme najít vysvětlení pro slovo podle našeho minislovníku.
-    Hledáme podle začátku slova (kořen).
-    Pokud nenajdeme, vrátíme obecnou větu, ale už NE 'vysvětli sám'.
-    """
-    for klic, vyznam in SLOVNIK_VYRAZU.items():
-        if slovo_lower.startswith(klic):
-            return vyznam
-    # fallback – učitel může s žákem dovysvětlit, ale není to chyba typu
-    # "vysvětli vlastními slovy".
-    if trida <= 3:
-        return "slovo, které si vysvětlíme spolu ve třídě (důležité pro hru)."
-    elif trida == 4:
-        return "slovo, které si vysvětlíme společně (týká se hodnocení / jídla)."
-    else:
-        return "slovo, které si vysvětlíme společně (týká se zdraví a výživy)."
 
-
-def vyber_slovicka(text, max_slov=10):
+def vyber_slovicka(text: str, max_slov: int = 10):
     """
-    Automatický výběr slov jako dřív:
-    - vezmeme delší výrazy (8+ znaků),
-    - odstraníme čísla,
-    - uděláme unikáty.
-    Vrací seznam slov (lowercase).
+    Automaticky vybere možná „těžší“ slova:
+    - slova s délkou 8+ znaků,
+    - bez čísel,
+    - vezme unikáty v pořadí výskytu.
+    Vrací seznam slov v lowercase.
     """
     slova = re.findall(r"[A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+", text)
     kandidati = [s.strip() for s in slova if len(s) >= 8]
@@ -137,63 +123,76 @@ def vyber_slovicka(text, max_slov=10):
     return unik[:max_slov]
 
 
-def priprav_slovnicek(text, trida, max_slov=10):
+def vysvetli_slovo(slovo_lower: str, trida: int) -> str:
     """
-    Vrátí list dvojic (slovo, vysvětlení pro dítě).
-    Použije automatický výběr a k nim přidá dětské vysvětlení.
+    Najdi co nejpřesnější dětské vysvětlení.
+    1. Zkusíme náš slovník (hledání podle začátku).
+    2. Když nenajdeme, dáme jemné „slovo, které si vysvětlíme ve třídě“,
+       formulované tak, aby to bylo přijatelné i do diplomky.
+    """
+    for klic, vyznam in SLOVNIK_VYRAZU.items():
+        if slovo_lower.startswith(klic):
+            return vyznam
+
+    if trida == 3:
+        return "důležité slovo z textu – vysvětlíme si ho spolu s učitelem."
+    elif trida == 4:
+        return "slovo z hodnocení jídla / kvality. Probereme spolu s učitelem."
+    else:
+        return "slovo z oblasti zdraví a jídla. Probereme spolu s učitelem."
+
+
+def priprav_slovnicek(text: str, trida: int, max_slov: int = 10):
+    """
+    Vrátí list dvojic (slovo, vysvětlení).
+    Tohle pak jde přímo do Wordu jako:
+    • slovo = vysvětlení
     """
     vybrana_slova = vyber_slovicka(text, max_slov=max_slov)
-    slovnik = []
+    vystup = []
     for slovo in vybrana_slova:
-        vysv = najdi_jednoduche_vysvetleni(slovo, trida)
-        slovnik.append((slovo, vysv))
-    return slovnik
+        popis = vysvetli_slovo(slovo, trida)
+        vystup.append((slovo, popis))
+    return vystup
 
 
-# -------------------------
-#  LMP / SPU PODPORA
-# -------------------------
+# =========================
+#  3. Podpůrná verze textu LMP/SPU
+# =========================
 
-def zjednodus_vetu(veta, max_slov=15):
+def zkrat_vetu(veta: str, limit_slov: int = 15):
     """
-    Hodně jednoduchá 'hrubá' úprava:
-    - vezmeme větu
-    - rozdělíme na slova
-    - uřízneme po max_slov
-    - odstraníme extra čárky na konci
-    Cíl: kratší věty pro LMP/SPU. Není to krásná literární úprava,
-    ale je to použitelný podpůrný text.
+    Udělá z věty kratší větu max limit_slov slov.
+    Čistě mechanicky, aby se to lépe četlo slabším čtenářům.
     """
     slova = veta.strip().split()
     if not slova:
         return ""
-    omezena = slova[:max_slov]
-    kratsi = " ".join(omezena)
-    kratsi = kratsi.strip(",;: ")
+    omezena = slova[:limit_slov]
+    kratsi = " ".join(omezena).strip(",;: ")
     return kratsi
 
 
-def priprav_LMP_text(puvodni_text):
+def priprav_text_LMP(puvodni_text: str):
     """
-    Uděláme podpůrnou verzi textu:
-    - rozdělíme text na věty podle .?!,
-    - každou větu zkrátíme,
-    - složíme zpět do kratších odstavců.
+    Vytvoří podpůrnou verzi textu:
+    - rozdělí text na věty podle .?!,
+    - každou větu zkrátí,
+    - složí kratší odstavce po 2 větách.
     """
-    # hrubé rozdělení na věty
     vety = re.split(r'(?<=[\.\?\!])\s+', puvodni_text.strip())
-    jednodussi_vety = []
+    kratke_vety = []
     for v in vety:
-        v_clean = v.replace("\n", " ").strip()
-        if not v_clean:
+        cista = v.replace("\n", " ").strip()
+        if not cista:
             continue
-        jednodussi_vety.append(zjednodus_vetu(v_clean, max_slov=15))
+        kratke_vety.append(zkrat_vetu(cista, limit_slov=15))
 
-    # spojíme po ~2 větách do krátkých odstavců
     odstavce = []
     blok = []
-    for i, vv in enumerate(jednodussi_vety):
-        blok.append(vv)
+    for vv in kratke_vety:
+        if vv:
+            blok.append(vv)
         if len(blok) == 2:
             odstavce.append(" ".join(blok))
             blok = []
@@ -203,156 +202,163 @@ def priprav_LMP_text(puvodni_text):
     return odstavce
 
 
-# -------------------------
-# OTÁZKY A / B / C podle ročníku
-# -------------------------
+# =========================
+#  4. Otázky pro žáky podle ročníku
+# =========================
 
-def priprav_otazky(trida, text):
+def priprav_otazky(trida: int):
     """
-    Vrátí (otazky_A, otazky_B, otazky_C, sebehodnoceni)
-    – stabilní sada pro diplomku.
+    Vrátí čtyři seznamy:
+    - otazky_A (porozumění textu)
+    - otazky_B (vysvětlení, důvody)
+    - otazky_C (vlastní názor)
+    - sebehodnoceni (smajlíky)
+    Hotové texty bez chybného číslování.
     """
-    txt_lower = text.lower()
 
-    # 3. třída - Karetní hra / návod
+    # 3. třída: text typu "Karetní hra"
     if trida == 3:
-        otazky_A = [
+        ot_A = [
             "1) Jaký je cíl hry? (zakroužkuj)\n"
             "   A) Mít co nejvíc karet na konci.\n"
             "   B) Zbavit se všech karet jako první.\n"
-            "   C) Nasbírat co nejvíc žolíků.",
-            "2) Co znamená v této hře 'přebít kartu'?",
-            "3) Kdo nebo co je chameleon v téhle hře?"
+            "   C) Sbírat jen speciální kartu chameleona.",
+            "2) Co znamená „přebít kartu“ v téhle hře?",
+            "3) Co dělá chameleon (žolík) v té hře?"
         ]
-        otazky_B = [
-            "4) Vysvětli: Co znamená říct 'pass'?",
-            "5) Proč je důležité vědět, kdo přebíjí koho?"
+        ot_B = [
+            "4) Co znamená, když hráč řekne „pass“?",
+            "5) Proč je důležité vědět, kdo koho přebíjí?"
         ]
-        otazky_C = [
+        ot_C = [
             "6) Chtěl/a bys tu hru hrát? Proč ano / proč ne?"
         ]
-        sebehodnoceni = [
+        self_eval = [
             "Rozuměl/a jsem pravidlům hry. 😃 / 🙂 / 😐",
-            "Vím, jak vyhrát hru. 😃 / 🙂 / 😐",
-            "Umím hru vysvětlit spolužákovi. 😃 / 🙂 / 😐",
+            "Vím, jak se dá vyhrát. 😃 / 🙂 / 😐",
+            "Umím hru vysvětlit spolužákovi. 😃 / 🙂 / 😐"
         ]
-        return otazky_A, otazky_B, otazky_C, sebehodnoceni
+        return ot_A, ot_B, ot_C, self_eval
 
-    # 4. třída - Věnečky / hodnocení kvality
+    # 4. třída: text typu "Věnečky"
     if trida == 4:
-        otazky_A = [
-            "1) Který věneček dopadl nejlépe? (napiš číslo věnečku)",
-            "2) Který věneček byl nejdražší? Kolik stál?",
+        ot_A = [
+            "1) Který věneček byl hodnocen jako nejlepší? (napiš číslo věnečku)",
+            "2) Který věneček byl nejdražší a kolik stál?",
             "3) Které tvrzení NENÍ pravda podle textu?\n"
-            "   A) Hodnotitelka říká, proč se jí něco líbí nebo nelíbí.\n"
-            "   B) V textu se porovnává kvalita různých zákusků.\n"
-            "   C) Text dává přesný domácí recept krok za krokem."
+            "   A) V textu se porovnává kvalita různých zákusků.\n"
+            "   B) Hodnotitelka říká, co je dobré a co je špatné, a proč.\n"
+            "   C) Text dává podrobný domácí recept krok za krokem."
         ]
-        otazky_B = [
-            "4) Co znamená, že krém je 'sražený'?",
+        ot_B = [
+            "4) Co znamená, když je krém „sražený“?",
             "5) Proč někdo říká, že by ‚vrátil výuční list‘ cukráři? Co tím chce říct?",
             "6) Najdi v textu:\n"
             "   • jednu větu, která je FAKT (dá se ověřit),\n"
             "   • jednu větu, která je NÁZOR (pocit člověka)."
         ]
-        otazky_C = [
-            "7) Souhlasíš s tím, kdo byl označen jako nejlepší? Proč?",
+        ot_C = [
+            "7) Souhlasíš s tím, který věneček byl nejlepší? Proč?",
             "8) Který zákusek bys chtěl/a ochutnat ty a proč?"
         ]
-        sebehodnoceni = [
+        self_eval = [
             "Rozuměl/a jsem textu. 😃 / 🙂 / 😐",
-            "Našel/la jsem odpovědi v textu. 😃 / 🙂 / 😐",
-            "Umím vysvětlit vlastními slovy. 😃 / 🙂 / 😐",
+            "Našel/našla jsem informace v textu. 😃 / 🙂 / 😐",
+            "Umím říct svůj názor a zdůvodnit ho. 😃 / 🙂 / 😐"
         ]
-        return otazky_A, otazky_B, otazky_C, sebehodnoceni
+        return ot_A, ot_B, ot_C, self_eval
 
-    # 5. třída - Sladké mámení / článek o zdraví a cukru
-    otazky_A = [
+    # 5. třída: text typu "Sladké mámení"
+    ot_A = [
         "1) Proč podle textu lidé hledají nízkokalorické sladkosti?",
-        "2) Co znamená slovo ‚nízkokalorické‘? Vysvětli jednoduše.",
-        "3) Které tvrzení je v rozporu s textem (není pravda)?"
+        "2) Co znamená „nízkokalorické“? Vysvětli jednoduše.",
+        "3) Jaký problém se v textu spojuje s obezitou?"
     ]
-    otazky_B = [
-        "4) Najdi v textu nějaký údaj z průzkumu (např. procenta) a opiš ho.",
-        "5) Jak autor popisuje, které sladkosti jsou ‚zdravější‘?",
-        "6) Vysvětli vlastními slovy pojem ‚jednoduché cukry‘."
+    ot_B = [
+        "4) Najdi a napiš jeden údaj z průzkumu (např. procento) a co znamená.",
+        "5) Jak autor popisuje, jaké sladkosti jsou ‚zdravější‘?",
+        "6) Vysvětli vlastními slovy pojem „jednoduchý cukr“."
     ]
-    otazky_C = [
-        "7) Myslíš si, že lidé opravdu chtějí ‚zdravé sladkosti‘? Proč ano / proč ne?",
-        "8) Kdy podle tebe dává smysl dát si ‚rychlý cukr‘?"
+    ot_C = [
+        "7) Myslíš si, že lidé vážně chtějí zdravější sladkosti? Proč ano / proč ne?",
+        "8) Kdy podle tebe dává smysl dát si ‚rychlý cukr‘ (např. hroznový cukr)?"
     ]
-    sebehodnoceni = [
+    self_eval = [
         "Rozuměl/a jsem článku. 😃 / 🙂 / 😐",
-        "Umím z textu vytáhnout informaci. 😃 / 🙂 / 😐",
-        "Vím, co je zdravější volba. 😃 / 🙂 / 😐",
+        "Umím najít důležitou informaci. 😃 / 🙂 / 😐",
+        "Vím, jak přemýšlet o zdravější volbě. 😃 / 🙂 / 😐"
     ]
-    return otazky_A, otazky_B, otazky_C, sebehodnoceni
+    return ot_A, ot_B, ot_C, self_eval
 
 
-# -------------------------
-# Vytvoření dokumentu pro žáky
-# -------------------------
+# =========================
+#  5. Vytvoření Word dokumentů
+# =========================
 
-def vytvor_docx_zaci(
-    trida,
-    puvodni_text,
-    dramatizace,
-    uvod,
-    lmp_odstavce,
-    slovnicek,
-    otazky_A, otazky_B, otazky_C,
-    sebehodnoceni
-):
-    """
-    Vytvoří žákovský pracovní list do .docx (Word).
-    Obsahuje:
-    - jméno, třída
-    - dramatizace
-    - text (běžná verze)
-    - text (zjednodušená podpora LMP/SPU)
-    - slovníček
-    - otázky A / B / C
-    - sebehodnocení
-    """
-
-    doc = Document()
-
-    # Globální font
+def nastav_docx_font(doc):
+    """Nastaví globální styl textu ve Wordu na Arial 11."""
     style = doc.styles['Normal']
     style.font.name = 'Arial'
     style.font.size = Pt(11)
 
-    doc.add_paragraph(f"{trida}. třída · Pracovní list (EdRead AI)")
+
+def docx_zaci(
+    trida: int,
+    puvodni_text: str,
+    dramatizace,
+    uvod_txt: str,
+    lmp_odstavce,
+    slovnicek,
+    otA, otB, otC,
+    self_eval
+):
+    """
+    Vytvoří pracovní list pro žáky (.docx):
+    - Hlavička
+    - Dramatizace
+    - O čem je text
+    - Text (běžná verze)
+    - Text zjednodušený (LMP/SPU)
+    - Slovníček
+    - Otázky A/B/C
+    - Sebehodnocení
+    """
+    doc = Document()
+    nastav_docx_font(doc)
+
+    # Hlavička
+    p = doc.add_paragraph(f"{trida}. třída · Pracovní list (EdRead AI)")
+    p.runs[0].bold = True
     doc.add_paragraph("Jméno: ______________________    Třída: ________    Datum: __________")
     doc.add_paragraph("")
 
     # Dramatizace
-    nadp = doc.add_paragraph("🎭 Úvodní scénka (zahájení hodiny)")
-    nadp.runs[0].bold = True
+    p = doc.add_paragraph("🎭 Úvodní scénka (zahájení hodiny)")
+    p.runs[0].bold = True
     doc.add_paragraph("Zahrajte si krátkou scénku. Cíl: naladit se na text.")
     for replika in dramatizace:
         doc.add_paragraph("• " + replika)
     doc.add_paragraph("")
 
     # O čem je text
-    nadp = doc.add_paragraph("📖 O čem je text")
-    nadp.runs[0].bold = True
-    doc.add_paragraph(uvod)
+    p = doc.add_paragraph("📖 O čem je text")
+    p.runs[0].bold = True
+    doc.add_paragraph(uvod_txt)
     doc.add_paragraph("")
 
     # Text pro čtení (běžná verze)
-    nadp = doc.add_paragraph("📘 Text pro čtení (běžná verze)")
-    nadp.runs[0].bold = True
+    p = doc.add_paragraph("📘 Text pro čtení (běžná verze)")
+    p.runs[0].bold = True
     for odst in puvodni_text.split("\n"):
         if odst.strip():
             doc.add_paragraph(odst.strip())
     doc.add_paragraph("")
 
-    # Text pro čtení – LMP/SPU
-    nadp = doc.add_paragraph("🟦 Text pro čtení – zjednodušená podpora (LMP / SPU)")
-    nadp.runs[0].bold = True
+    # Zjednodušená verze (LMP/SPU)
+    p = doc.add_paragraph("🟦 Text pro čtení – zjednodušená podpora (LMP / SPU)")
+    p.runs[0].bold = True
     doc.add_paragraph(
-        "Tento text má kratší věty a jednodušší vyznění. "
+        "Tento text má kratší věty a jednodušší vyjádření. "
         "Použij ho, pokud se ti původní text čte hůř."
     )
     for odst in lmp_odstavce:
@@ -362,171 +368,176 @@ def vytvor_docx_zaci(
 
     # Slovníček pojmů
     if slovnicek:
-        nadp = doc.add_paragraph("📚 Slovníček pojmů")
-        nadp.runs[0].bold = True
+        p = doc.add_paragraph("📚 Slovníček pojmů")
+        p.runs[0].bold = True
         doc.add_paragraph(
-            "Tato slova můžou být náročnější. Vysvětlení je jednoduché, aby ti pomohlo textu lépe rozumět."
+            "Tato slova můžou být náročnější. Vysvětlení je napsané tak, "
+            "aby ti pomohlo lépe rozumět textu."
         )
-        for slovo, vysvetleni in slovnicek:
-            doc.add_paragraph(f"• {slovo} = {vysvetleni}")
+        for slovo, vyznam in slovnicek:
+            doc.add_paragraph(f"• {slovo} = {vyznam}")
         doc.add_paragraph("")
 
-    # Otázky A
-    nadp = doc.add_paragraph("🧠 OTÁZKY A – Porozumění textu")
-    nadp.runs[0].bold = True
-    for q in otazky_A:
+    # OTÁZKY A
+    p = doc.add_paragraph("🧠 OTÁZKY A – Porozumění textu")
+    p.runs[0].bold = True
+    for q in otA:
         doc.add_paragraph(q)
-        doc.add_paragraph("Odpověď: ________________________________")
+        doc.add_paragraph("Odpověď: ______________________________________")
         doc.add_paragraph("")
 
-    # Otázky B
-    nadp = doc.add_paragraph("💭 OTÁZKY B – Vysvětluji / zdůvodňuji")
-    nadp.runs[0].bold = True
-    for q in otazky_B:
+    # OTÁZKY B
+    p = doc.add_paragraph("💭 OTÁZKY B – Vysvětluji a zdůvodňuji")
+    p.runs[0].bold = True
+    for q in otB:
         doc.add_paragraph(q)
-        doc.add_paragraph("Odpověď: ________________________________")
+        doc.add_paragraph("Odpověď: ______________________________________")
         doc.add_paragraph("")
 
-    # Otázky C
-    nadp = doc.add_paragraph("🌟 OTÁZKY C – Můj názor")
-    nadp.runs[0].bold = True
-    for q in otazky_C:
+    # OTÁZKY C
+    p = doc.add_paragraph("🌟 OTÁZKY C – Můj názor")
+    p.runs[0].bold = True
+    for q in otC:
         doc.add_paragraph(q)
-        doc.add_paragraph("Odpověď: ________________________________")
+        doc.add_paragraph("Odpověď: ______________________________________")
         doc.add_paragraph("")
 
     # Sebehodnocení
-    nadp = doc.add_paragraph("📝 Sebehodnocení žáka")
-    nadp.runs[0].bold = True
-    for r in sebehodnoceni:
+    p = doc.add_paragraph("📝 Sebehodnocení žáka")
+    p.runs[0].bold = True
+    for r in self_eval:
         doc.add_paragraph(r)
 
+    # hotovo
     bio = BytesIO()
     doc.save(bio)
     bio.seek(0)
     return bio
 
 
-# -------------------------
-# Vytvoření METODICKÉHO LISTU
-# -------------------------
-
-def vytvor_docx_ucitel(
-    trida,
-    puvodni_text,
+def docx_ucitel(
+    trida: int,
+    puvodni_text: str,
     dramatizace,
-    uvod,
-    otazky_A, otazky_B, otazky_C,
-    sebehodnoceni
+    uvod_txt: str,
+    otA, otB, otC,
+    self_eval
 ):
     """
-    Metodický list je SAMOSTATNÝ dokument.
-    Obsahuje:
-    - Cíl hodiny
-    - Vazbu na RVP ZV (čtenářská gramotnost)
-    - Doporučený průběh
-    - Diferenciaci (včetně LMP / SPU)
-    - Přehled otázek A / B / C
+    Metodický list pro učitele (.docx):
+    - Téma, cíle, RVP ZV
+    - Doporučený průběh hodiny
+    - Diferenciace (LMP/SPU)
+    - Přehled otázek
+    - Poznámka pro DP
     """
-
     doc = Document()
+    nastav_docx_font(doc)
 
-    style = doc.styles['Normal']
-    style.font.name = 'Arial'
-    style.font.size = Pt(11)
-
-    nadp = doc.add_paragraph("📘 METODICKÝ LIST PRO UČITELE")
-    nadp.runs[0].bold = True
+    # Nadpis
+    p = doc.add_paragraph("📘 METODICKÝ LIST PRO UČITELE")
+    p.runs[0].bold = True
     doc.add_paragraph(f"Ročník: {trida}. třída")
     doc.add_paragraph("")
 
+    # Téma hodiny
     doc.add_paragraph("Téma hodiny:")
     if trida == 3:
-        doc.add_paragraph("Porozumění návodu / pravidlům hry, práce s informací krok za krokem.")
+        doc.add_paragraph(
+            "Porozumění návodu / pravidlům hry. Pochopení kroků, kdo je silnější a jak vyhrát."
+        )
     elif trida == 4:
-        doc.add_paragraph("Porozumění hodnoticímu textu (zákusek = produkt), rozdíl názor/fakt.")
+        doc.add_paragraph(
+            "Porozumění hodnoticímu textu o kvalitě výrobku. Rozlišování faktu a názoru."
+        )
     else:
-        doc.add_paragraph("Porozumění publicistickému textu o sladkostech a zdraví, práce s daty a tvrzeními.")
-
+        doc.add_paragraph(
+            "Porozumění publicistickému textu o sladkostech a zdraví. "
+            "Práce s informací a argumentací."
+        )
     doc.add_paragraph("")
 
+    # Cíle hodiny
     doc.add_paragraph("Cíle hodiny (pro žáka):")
     doc.add_paragraph("1. Žák rozumí hlavnímu sdělení textu.")
     doc.add_paragraph("2. Žák vyhledá konkrétní informaci v textu.")
-    doc.add_paragraph("3. Žák rozliší FAKT a NÁZOR (4.–5. třída).")
-    doc.add_paragraph("4. Žák formuluje vlastní názor a krátce ho zdůvodní.")
-    doc.add_paragraph("5. Žák reflektuje, jak se mu četlo (sebehodnocení).")
+    doc.add_paragraph("3. Žák rozlišuje FAKT vs. NÁZOR (4.–5. třída).")
+    doc.add_paragraph("4. Žák formuluje svůj názor a zdůvodní ho v krátké větě.")
+    doc.add_paragraph("5. Žák reflektuje své porozumění (sebehodnocení).")
     doc.add_paragraph("")
 
-    # Vazba na RVP ZV: český jazyk a jazyková komunikace – čtenářská gramotnost
-    # (formulace z RVP ZV typu: porozumění textu; vyhledávání informací; rozlišování faktu a názoru;
-    # vyjadřování vlastního postoje k textu)
-    nadp = doc.add_paragraph("Vazba na RVP ZV (obor Český jazyk a literatura, čtenářská gramotnost)")
-    nadp.runs[0].bold = True
-    doc.add_paragraph("• Žák čte s porozuměním a rozumí smyslu textu.")
-    doc.add_paragraph("• Žák vyhledává a třídí základní informace v různých typech textů.")
-    doc.add_paragraph("• Žák rozlišuje mezi faktickým sdělením a názorem / hodnocením (4.–5. ročník).")
-    doc.add_paragraph("• Žák formuluje jednoduché vlastní hodnocení textu a zdůvodní ho s pomocí učitele.")
-    doc.add_paragraph("• Žák reflektuje vlastní porozumění textu (sebehodnocení).")
+    # Vazba na RVP ZV
+    p = doc.add_paragraph("Vazba na RVP ZV (Český jazyk a literatura – čtenářská gramotnost)")
+    p.runs[0].bold = True
+    doc.add_paragraph("• Žák čte s porozuměním text přiměřený věku.")
+    doc.add_paragraph("• Žák vyhledává a třídí základní informace v textu.")
+    doc.add_paragraph("• Žák rozlišuje mezi faktickým sdělením a názorem / hodnocením.")
+    doc.add_paragraph("• Žák vyjadřuje jednoduché hodnocení textu nebo situace a svůj postoj zdůvodní.")
+    doc.add_paragraph("• Žák se učí reflektovat vlastní porozumění textu (sebehodnocení → já rozumím / nerozumím).")
     doc.add_paragraph("")
 
-    doc.add_paragraph("Doporučený průběh (45 min):")
+    # Doporučený průběh hodiny
+    doc.add_paragraph("Doporučený průběh hodiny (45 minut):")
     doc.add_paragraph("1) MOTIVACE / DRAMATIZACE (cca 5 min)")
-    doc.add_paragraph("   - Krátká scénka podle dramatizace. Vtáhne žáky do situace a smyslu textu.")
-    doc.add_paragraph("2) PRÁCE S TEXTEM (cca 10–15 min)")
-    doc.add_paragraph("   - Žáci čtou běžnou verzi textu.")
-    doc.add_paragraph("   - Slabší čtenáři nebo žáci s LMP/SPU čtou zjednodušenou verzi (kratší věty).")
-    doc.add_paragraph("   - Učitel vysvětlí složitější slova pomocí slovníčku.")
-    doc.add_paragraph("3) OTÁZKY A / B / C (cca 15 min)")
-    doc.add_paragraph("   - A: vyhledání informací v textu.")
-    doc.add_paragraph("   - B: vysvětlení a odůvodnění, práce s pojmy.")
-    doc.add_paragraph("   - C: vyjádření vlastního názoru k textu / produktu / situaci.")
+    doc.add_paragraph("   - Krátká scénka (viz níže). Žáci se vtáhnou do situace.")
+    doc.add_paragraph("2) ČTENÍ TEXTU (cca 10–15 min)")
+    doc.add_paragraph("   - Společné nebo samostatné čtení původního textu.")
+    doc.add_paragraph("   - Slabší čtenáři / žáci s LMP/SPU čtou zjednodušenou verzi (kratší věty).")
+    doc.add_paragraph("   - Učitel vysvětlí obtížná slova pomocí slovníčku.")
+    doc.add_paragraph("3) PRÁCE S OTÁZKAMI (cca 15 min)")
+    doc.add_paragraph("   - A: porozumění textu – vyhledání informací.")
+    doc.add_paragraph("   - B: vysvětlení pojmů / proč si to postava myslí.")
+    doc.add_paragraph("   - C: názor žáka, krátká argumentace.")
     doc.add_paragraph("4) SEBEHODNOCENÍ (cca 5 min)")
-    doc.add_paragraph("   - Žáci označí, jak se jim dařilo rozumět textu.")
+    doc.add_paragraph("   - Žáci označí smajlíka 😃 🙂 😐 u tří vět.")
     doc.add_paragraph("")
 
+    # Diferenciace / inkluze
     doc.add_paragraph("Diferenciace a podpora (inkluzivní přístup):")
-    doc.add_paragraph("• Žáci s LMP/SPU mohou pracovat hlavně se zjednodušenou verzí textu (kratší věty).")
-    doc.add_paragraph("• U nich můžeme zmenšit počet otázek, např. pouze z OTÁZEK A a jednu otázku z části C.")
-    doc.add_paragraph("• U silnějších čtenářů lze naopak rozšířit část C: chtít delší zdůvodnění.")
+    doc.add_paragraph("• Žáci s LMP/SPU pracují primárně se zjednodušenou verzí textu (kratší věty).")
+    doc.add_paragraph("• U nich můžeme omezit počet otázek pouze na část A a jednu otázku z části C.")
+    doc.add_paragraph("• Silnější žáci mohou dostat úkol ‚rozliš fakt vs. názor a vysvětli proč‘.")
     doc.add_paragraph("")
 
+    # Dramatizace pro učitele
     doc.add_paragraph("Dramatizace (zahájení hodiny):")
     for r in dramatizace:
         doc.add_paragraph("• " + r)
     doc.add_paragraph("")
 
-    doc.add_paragraph("Stručný obsah textu pro učitele:")
-    doc.add_paragraph(uvod)
+    # Stručný obsah textu (pro učitele, aby věděl, jak to shrnout dětem)
+    doc.add_paragraph("Stručné vysvětlení textu pro žáky (jak jim to říct):")
+    doc.add_paragraph(uvod_txt)
     doc.add_paragraph("")
 
-    doc.add_paragraph("Přehled otázek pro žáky:")
-    doc.add_paragraph("OTÁZKY A – Porozumění textu:")
-    for q in otazky_A:
+    # Přehled otázek
+    doc.add_paragraph("Přehled žákovských otázek:")
+    doc.add_paragraph("OTÁZKY A – Porozumění textu")
+    for q in otA:
         doc.add_paragraph("• " + q)
     doc.add_paragraph("")
 
-    doc.add_paragraph("OTÁZKY B – Vysvětluji / zdůvodňuji:")
-    for q in otazky_B:
+    doc.add_paragraph("OTÁZKY B – Vysvětluji a zdůvodňuji")
+    for q in otB:
         doc.add_paragraph("• " + q)
     doc.add_paragraph("")
 
-    doc.add_paragraph("OTÁZKY C – Můj názor:")
-    for q in otazky_C:
+    doc.add_paragraph("OTÁZKY C – Můj názor")
+    for q in otC:
         doc.add_paragraph("• " + q)
     doc.add_paragraph("")
 
-    doc.add_paragraph("Sebehodnocení žáka:")
-    for r in sebehodnoceni:
+    doc.add_paragraph("Sebehodnocení žáka")
+    for r in self_eval:
         doc.add_paragraph("• " + r)
-
     doc.add_paragraph("")
+
+    # Poznámka pro DP
     doc.add_paragraph(
-        "Poznámka pro diplomovou práci: Tento list a metodika "
-        "jsou generovány prototypem EdRead AI. Nástroj "
-        "vytváří (1) text pro čtení, (2) jednodušší podporu pro žáky s LMP/SPU, "
-        "(3) slovníček složitějších slov s jednoduchým vysvětlením, "
-        "(4) otázky A/B/C podle RVP ZV zaměřené na čtenářskou gramotnost."
+        "Poznámka pro diplomovou práci: Tento metodický list i žákovský list "
+        "jsou vytvořené nástrojem EdRead AI. Nástroj automaticky generuje "
+        "podpůrnou verzi textu (LMP/SPU), slovníček složitějších slov s dětským "
+        "vysvětlením, otázky k porozumění/textové práci a vazbu na RVP ZV."
     )
 
     bio = BytesIO()
@@ -536,74 +547,80 @@ def vytvor_docx_ucitel(
 
 
 # =========================
-# STREAMLIT APLIKACE
+#  6. Streamlit aplikace
 # =========================
 
-st.set_page_config(page_title="EdRead AI – školní prototyp", layout="centered")
+st.set_page_config(
+    page_title="EdRead AI – generátor pracovních listů (verze 5)",
+    layout="centered"
+)
 
-st.title("EdRead AI – generátor pracovních listů")
-st.write("Verze 4 (LMP/SPU podpora, slovníček s vysvětlením, metodika zvlášť).")
+st.title("EdRead AI – generátor pracovních listů (verze 5)")
+st.write("Automaticky vytvoří:")
+st.write("• pracovní list pro žáky (Word) – včetně LMP/SPU verze textu, slovníčku a otázek")
+st.write("• metodický list pro učitele (Word) – včetně vazby na RVP ZV")
 
-st.write("1) Vlož text pro žáky (přesně tak, jak ho použiješ ve výuce).")
-puvodni_text = st.text_area("Výchozí text (kopie z testu / článku / zadání úlohy)", height=400)
+st.markdown("### 1) Vlož text pro žáky")
+puvodni_text = st.text_area(
+    "Sem vlož výchozí text (např. Karetní hra / Věnečky / Sladké mámení).",
+    height=400
+)
 
-st.write("2) Vyber ročník, pro který list tvoříš.")
+st.markdown("### 2) Vyber ročník")
 trida_volba = st.selectbox("Ročník:", ["3", "4", "5"])
 
-if st.button("Vytvořit dokumenty (.docx)"):
+
+if st.button("Vygenerovat Word dokumenty"):
     if not puvodni_text.strip():
-        st.error("Nejdřív vlož text.")
+        st.error("Musíš vložit text.")
     else:
         trida = detekuj_tridu(trida_volba)
 
-        # připravíme části
+        # připravíme části obsahu
         dramatizace = priprav_dramatizaci(trida)
-        uvod = priprav_uvod_pro_zaka(trida)
-
-        lmp_odstavce = priprav_LMP_text(puvodni_text)
-
+        uvod_txt = priprav_uvod_pro_zaka(trida)
+        lmp_verze = priprav_text_LMP(puvodni_text)
         slovnicek = priprav_slovnicek(puvodni_text, trida, max_slov=10)
+        otA, otB, otC, self_eval = priprav_otazky(trida)
 
-        otA, otB, otC, sebehod = priprav_otazky(trida, puvodni_text)
-
-        # vytvořit dokument pro žáky
-        docx_zaci = vytvor_docx_zaci(
+        # vytvořit Word pro žáky
+        soubor_zaci = docx_zaci(
             trida,
             puvodni_text,
             dramatizace,
-            uvod,
-            lmp_odstavce,
+            uvod_txt,
+            lmp_verze,
             slovnicek,
             otA, otB, otC,
-            sebehod
+            self_eval
         )
 
-        # vytvořit metodiku pro učitele
-        docx_ucitel = vytvor_docx_ucitel(
+        # vytvořit Word pro učitele
+        soubor_ucitel = docx_ucitel(
             trida,
             puvodni_text,
             dramatizace,
-            uvod,
+            uvod_txt,
             otA, otB, otC,
-            sebehod
+            self_eval
         )
 
-        today_str = datetime.date.today().isoformat()
-        fname_student = f"pracovni_list_EdReadAI_{trida}trida_{today_str}.docx"
-        fname_teacher = f"metodicky_list_EdReadAI_{trida}trida_{today_str}.docx"
+        today = datetime.date.today().isoformat()
+        fname_students = f"EdReadAI_zaci_{trida}trida_{today}.docx"
+        fname_teacher = f"EdReadAI_ucitel_{trida}trida_{today}.docx"
 
-        st.success("Dokumenty připraveny. Stáhni Word soubory níže:")
+        st.success("Hotovo. Stáhni oba Word dokumenty níže:")
 
         st.download_button(
             label="📥 Stáhnout pracovní list pro žáky (.docx)",
-            data=docx_zaci,
-            file_name=fname_student,
+            data=soubor_zaci,
+            file_name=fname_students,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
 
         st.download_button(
             label="📘 Stáhnout metodický list pro učitele (.docx)",
-            data=docx_ucitel,
+            data=soubor_ucitel,
             file_name=fname_teacher,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
