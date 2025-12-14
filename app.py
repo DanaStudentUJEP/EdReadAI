@@ -1,577 +1,453 @@
+# app.py – EdRead AI (verze s opravou pyramidy a dramatizace)
+
 import streamlit as st
+from io import BytesIO
 from docx import Document
 from docx.shared import Pt
-from io import BytesIO
-import re
-import datetime
 
-# ============================================================
-# 1) PŘEDNASTAVENÉ TEXTY PRO JEDNOTLIVÉ ROČNÍKY
-# ============================================================
+# -------------------------
+# KONFIGURACE UI
+# -------------------------
 
-TEXTY = {
-    "Karetní hra (3. třída)": {
-        "trida": "3. třída",
-        "text_puvodni": """NÁZEV ÚLOHY: KARETNÍ HRA
+st.set_page_config(
+    page_title="EdRead AI – prototyp",
+    page_icon="📚",
+    layout="centered"
+)
 
-1. Herní materiál
-60 karet živočichů: 4 komáři, 1 chameleon (žolík), 5 karet od každého z dalších 11 druhů živočichů
+st.title("📖 EdRead AI – prototyp pro diplomovou práci")
+st.write(
+    "Nástroj pro automatickou tvorbu pracovních listů a metodických listů "
+    "k rozvoji čtenářské gramotnosti (3.–5. ročník ZŠ)."
+)
 
-2. Popis hry
-Všechny karty se rozdají mezi jednotlivé hráče. Hráči se snaží vynášet karty v souladu s pravidly tak, aby se co nejdříve zbavili všech svých karet z ruky. Zahrát lze vždy pouze silnější kombinaci živočichů, než zahrál hráč před vámi.
+# -------------------------
+# PŘEDPŘIPRAVENÉ DRAMATIZACE
+# -------------------------
 
-3. Pořadí karet
-Na každé kartě je zobrazen jeden živočich. V rámečku v horní části karty jsou namalováni živočichové, kteří danou kartu přebíjí.
+def get_dramatizace(rocnik: int) -> str:
+    """Vrátí krátkou úvodní dramatizaci podle ročníku."""
+    if rocnik == 3:
+        # Karetní hra – návodová situace
+        return (
+            "DRAMATIZACE (zahájení hodiny)\n"
+            "Anička: „Mám tady pravidla nové karetní hry a vůbec jim nerozumím!“\n"
+            "Marek: „Ukaž. Tady je napsané, kdo koho přebíjí. To je jako kdo je silnější.“\n"
+            "Učitelka: „Zkusíme si to nejdřív zahrát jako divadlo. Každý bude jedno zvíře a uvidíme, "
+            "kdo koho porazí. Pak si text přečteme ještě jednou.“\n"
+        )
+    elif rocnik == 4:
+        # Věnečky – ochutnávka a hodnocení
+        return (
+            "DRAMATIZACE (zahájení hodiny)\n"
+            "Žák A: „Já mám nejradši věnečky z cukrárny na rohu. Ty jsou nejlepší!“\n"
+            "Žák B: „Mně naopak chutnají jinde, támhle v nové pekárně.“\n"
+            "Učitel: „Každý z vás má nějakou zkušenost. Dnes se podíváme na text, kde profesionálka "
+            "popisuje, jak posuzuje věnečky. Budeme číst, jak hodnotí vzhled, chuť i těsto.“\n"
+        )
+    elif rocnik == 5:
+        # Sladké mámení – OPRAVENÁ dramatizace
+        return (
+            "DRAMATIZACE (zahájení hodiny)\n"
+            "Žák A: „Já miluju čokoládu. Nejradši bych ji jedl každý den.“\n"
+            "Žák B: „Máma mi říká, že je to samý cukr a že si mám dát radši něco zdravějšího.“\n"
+            "Učitel: „Možná mají rodiče trochu pravdu. Dnes si přečteme článek o tom, jak moc "
+            "lidé jedí sladkosti, proč se mluví o obezitě a co řeší výrobci čokolády. Budeme "
+            "společně hledat v textu informace a přemýšlet, co si z toho odnést.“\n"
+        )
+    else:
+        return ""
 
-Příklad:
-– Kosatku přebijí pouze dvě kosatky.
-– Krokodýla přebijí dva krokodýli nebo jeden slon.
-– Chameleon funguje jako žolík. Nelze ho hrát samostatně, ale může doplnit jinou kartu.
 
-4. Průběh hry
-• Karty zamíchejte a rozdejte rovnoměrně mezi všechny hráče. Každý hráč má karty v ruce a neukazuje je ostatním.
-• Hráč po levé ruce rozdávajícího začíná. Položí na stůl jednu kartu nebo více stejných karet.
-• Další hráči se snaží „přebít“ – buď položí stejný počet silnějších zvířat, nebo položí tentýž druh zvířete, ale o jednu kartu víc.
-• Hráč, který nechce nebo nemůže přebít, řekne „pass“ a toto kolo přeskočí.
-• Pokud nikdo nepřebije, hráč, který měl poslední platný tah, si vezme karty ze středu stolu na hromádku bokem (ty už se dál nepoužívají) a začne nové kolo.
-• Vyhrává ten, kdo se první zbaví všech karet v ruce.
-""",
-        "text_zjednoduseny": """KARETNÍ HRA – zjednodušený text
+# -------------------------
+# ZJEDNODUŠENÍ TEXTU (VELMI JEDNODUCHÉ)
+# -------------------------
 
-V balíčku je 60 karet se zvířaty. Každý hráč dostane svoje karty.
-Cíl hry: Být první, kdo nemá žádné karty v ruce.
+def zjednodus_text(text: str, rocnik: int) -> str:
+    """
+    Velmi jednoduché zjednodušení:
+    - rozdělí na řádky / věty,
+    - nechá odstavec po odstavci,
+    - případně vloží prázdný řádek mezi dlouhé bloky.
+    Nechceme chytračit, spíš text „provzdušnit“ pro děti.
+    """
+    if not text.strip():
+        return ""
 
-Jak se hraje:
-1. Jeden hráč vyloží kartu nebo více stejných karet (např. dvě myši).
-2. Další hráč se snaží tyto karty „přebít“.
-   - Přebít znamená dát silnější zvíře.
-   - Nebo dát stejné zvíře, ale o jednu kartu víc (např. tři myši proti dvěma myším).
-3. Kdo nemůže, řekne „pass“ a vynechá.
-4. Když už nikdo nedokáže přebít, vezme si poslední hráč karty ze stolu bokem a začne nové kolo.
-5. Kdo první nemá karty, vyhrál.
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    new_lines = []
+    for ln in lines:
+        # Pro mladší ročníky ještě víc „usekneme“ příliš dlouhé řádky
+        if rocnik in (3, 4) and len(ln) > 150:
+            # Rozdělit zhruba na dvě části
+            stred = len(ln) // 2
+            new_lines.append(ln[:stred].strip())
+            new_lines.append(ln[stred:].strip())
+            new_lines.append("")  # prázdný řádek
+        else:
+            new_lines.append(ln)
+            new_lines.append("")
 
-Pozor:
-– Chameleon je speciální karta (žolík). Sám hrát nesmí. Pomáhá jiné kartě.
-– Některá zvířata jsou „silnější“ než jiná. Silnější může přebít slabší.
+    return "\n".join(new_lines).strip()
 
-Tohle je hra na přemýšlení a plánování 🙂.
-""",
-        "text_LMP": """KARETNÍ HRA – snadné vysvětlení
 
-V balíčku jsou karty se zvířaty.
-Každý hráč má svoje karty.
+# -------------------------
+# SLOVNÍČEK – VÝBĚR SLOV A JEDNODUCHÉ VYSVĚTLENÍ
+# -------------------------
 
-Cíl hry: Nemít žádné karty.
-
-Jak hra probíhá:
-1. První hráč dá kartu na stůl.
-2. Další hráč musí dát silnější zvíře.
-3. Když nemá silnější zvíře, řekne „pass“ (vynechám).
-4. Vyhrává ten, kdo už nemá žádné karty.
-
-Důležité:
-– Některá zvířata jsou silná (např. lev).
-– Některá zvířata jsou slabá (např. myš).
-– Chameleon je speciální karta. Pomůže ti, ale nesmí být na stole úplně sám.
-""",
-        "dramatizace": """DRAMATIZACE (motivační scénka na začátek hodiny)
-
-Tereza: „Hele, já mám pravidla té hry, ale moc tomu nerozumím.“
-Daniel: „Já taky ne. Co znamená, že ‚lev přebije tuleně‘?“
-Učitelka: „Dobře, pojďme si to zahrát naživo. Ty budeš lev. Ty budeš tuleň. Kdo vyhraje?“
-(Děti se zasmějí, zkusí „souboj“ zvířat.)
-Učitelka: „A přesně takhle to funguje v té karetní hře. Teď si přečteme pravidla a zjistíme proč.“""",
-        "otazky_A": [
-            "1) Jaký je cíl hry?",
-            "2) Co znamená, když hráč řekne 'pass'?",
-            "3) Kdy hra končí?"
-        ],
-        "otazky_B": [
-            "4) Proč je chameleon speciální karta?",
-            "5) Vysvětli, co znamená 'přebít kartu'."
-        ],
-        "otazky_C": [
-            "6) Co by ti v téhle hře šlo nejvíc? Plánování? Paměť? Nebo rychlé rozhodnutí? Proč?"
-        ],
-        "slovnik_doplnkova_vysvetleni": {
-            "přebít": "dát lepší / silnější kartu",
-            "kombinace": "více karet, které dáváš najednou",
-            "chameleon": "speciální karta, která může být jako jiné zvíře",
-            "žolík": "karta, která nahrazuje jinou kartu",
-            "pravidla": "to, jak se má správně hrát",
-            "kolo": "část hry od začátku do chvíle, než nikdo další nepřehraje",
-            "přeskočí": "vynechá svůj tah"
-        },
-        "rvp_vystupy": [
-            "Žák rozumí krátkému návodu a dokáže podle něj jednat.",
-            "Žák vyhledává konkrétní informaci v textu.",
-            "Žák odpovídá celou větou a používá slova z textu."
-        ]
-    },
-
-    "Věnečky (4. třída)": {
-        "trida": "4. třída",
-        "text_puvodni": """(původní text Věnečky ... z časopisu Týden atd.)""",
-        "text_zjednoduseny": """(zkrácená verze pro 4. třídu – popis ochutnávání věnečků, co je dobré/špatné, kdo vyhrál, proč)""",
-        "text_LMP": """(ještě jednodušší jazyk pro žáky s potřebou podpory – kratší věty, vysvětlena slova jako 'pudink', 'korpus', 'šlehačka')""",
-        "dramatizace": """(scénka: 'Já chci nejlepší dort!' 'Jak poznáš, který je nejlepší?' -> 'Musíme ochutnat a porovnávat podle pravidel.')""",
-        "otazky_A": [
-            "1) Který věneček dopadl nejlépe?",
-            "2) Proč byl jeden věneček kritizovaný?"
-        ],
-        "otazky_B": [
-            "3) Jak cukrářka pozná, že krém je špatný?",
-            "4) Co znamená, že těsto bylo 'ztvrdlé'?"
-        ],
-        "otazky_C": [
-            "5) Co by pro tebe znamenalo 'dobrý zákusek'? Popiš."
-        ],
-        "slovnik_doplnkova_vysvetleni": {
-            "pudink": "nasládlý krém (vaří se z mléka a prášku)",
-            "korpus": "spodek / tělo zákusku z těsta",
-            "margarín": "levnější tuk podobný máslu",
-            "sražený": "špatně vyšlehaný, hrudkovatý",
-            "receptura": "přesný postup a suroviny",
-            "přepečená": "peklo se to moc dlouho, je to moc tvrdé",
-            "štrúdl": "závin s náplní (třeba jablka)"
-        },
-        "rvp_vystupy": [
-            "Žák porozumí popisnému / hodnotícímu textu.",
-            "Žák vyhledává údaje v souvislém textu i v tabulce.",
-            "Žák rozlišuje fakt (co se dá ověřit) a názor (osobní hodnocení)."
-        ]
-    },
-
-    "Sladké mámení (5. třída)": {
-        "trida": "5. třída",
-        "text_puvodni": """(původní text o čokoládě, poptávce po nízkokalorických sladkostech, průzkumu Median atd.)""",
-        "text_zjednoduseny": """(zjednodušený přehled pro 5. třídu – proč lidi řeší kalorie, co říkají čísla v tabulkách, jak často lidé jedí čokoládu)""",
-        "text_LMP": """(verze pro LMP: kratší věty, vysvětlení 'nízkokalorický = málo kalorií', 'průzkum = ptali se lidí')""",
-        "dramatizace": """DRAMATIZACE (úvod do hodiny)
-
-Žák A: „Mám rád čokoládu. Ale máma říká, že je to samý cukr.“
-Žák B: „A prodávají i takovou, co není tak sladká. Prý 'light'.”
-Učitel: „Právě o tom budeme číst. Jak moc lidi jedí sladkosti a proč to řeší doktoři.”""",
-        "otazky_A": [
-            "1) Co je hlavní problém, o kterém text mluví?",
-            "2) Co znamená 'nízkokalorická sladkost'?"
-        ],
-        "otazky_B": [
-            "3) Proč některé firmy dělají 'light' sladkosti?",
-            "4) Co dělali lidé v průzkumu? (Co dělala agentura Median?)"
-        ],
-        "otazky_C": [
-            "5) Jaký máš ty vztah ke sladkému? Je to pro tebe odměna, energie, nebo zvyk?"
-        ],
-        "slovnik_doplnkova_vysvetleni": {
-            "nízkokalorický": "málo kalorií = 'není tak výkrmné'",
-            "průzkum": "ptali se hodně lidí a zapisovali odpovědi",
-            "obezita": "když má tělo příliš mnoho tuku, ohrožuje to zdraví",
-            "kalorie": "energie z jídla",
-            "sladidlo": "něco, co dává sladkou chuť místo cukru",
-            "spotřebitel": "člověk, který si něco kupuje a jí / používá",
-            "energetická hodnota": "kolik energie z toho tělo dostane"
-        },
-        "rvp_vystupy": [
-            "Žák umí číst publicistický text a vybrat hlavní sdělení.",
-            "Žák umí použít údaje z grafu/tabulky do odpovědi.",
-            "Žák formuluje svůj názor a odůvodní ho."
-        ]
-    }
+# Malý ručně vytvořený mini-slovník pro typická „těžší“ slova, která
+# se mohou v textech Karetní hra / Věnečky / Sladké mámení vyskytovat.
+RUČNI_SLOVNIK = {
+    "odpalované": "těsto, které se nejdříve vaří a pak peče (např. na věnečky)",
+    "korpus": "spodní část dortu nebo zákusku, upečené těsto",
+    "pudink": "sladký mléčný krém, který se vaří z mléka a prášku",
+    "margarín": "rostlinný tuk podobný máslu",
+    "krém": "hutná náplň do dortů nebo zákusků",
+    "šlehačka": "našlehaná smetana, bílý nadýchaný krém",
+    "chemický": "umělý, ne přírodní",
+    "argumentace": "vysvětlování a zdůvodňování názoru",
+    "obezita": "nadměrná tělesná hmotnost, člověk je výrazně tlustý",
+    "metabolismus": "procesy v těle, které zpracovávají potravu",
+    "cukrovinka": "sladkost, bonbon, tyčinka apod.",
+    "návod": "popis, jak něco dělat krok za krokem",
+    "strategie": "promyšlený postup, plán, jak ve hře zvítězit",
+    "pravidla": "to, co se ve hře musí dodržovat",
 }
 
+import re
 
-# ============================================================
-# 2) FUNKCE PRO AUTOMATICKÝ SLOVNÍČEK
-#    - vybere kandidáty
-#    - dá k nim jednoduché vysvětlení, pokud máme
-#    - jinak nechá prázdnou linku
-# ============================================================
-
-def navrhni_slovicka(text, doplnkova_vysvetleni, max_slov=10):
+def vyber_slovicka(text: str, max_slov: int = 10):
     """
-    1. vytáhne delší slova (8+ znaků) jako možná náročná
-    2. odstraní duplicity
-    3. vrátí do listu max_slov položek
+    Vybere kandidáty na 'těžší' slova:
+    - delší výrazy (8+ znaků),
+    - bez čísel,
+    - unikátní.
     """
     slova = re.findall(r"[A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+", text)
-    kandidati = []
-    for s in slova:
-        s_clean = s.strip().lower()
-        if len(s_clean) >= 8 and s_clean not in kandidati:
-            kandidati.append(s_clean)
-    # doplníme i kratší důležitá slova z doplnkova_vysvetleni,
-    # aby se určitě dostala dovnitř
-    for k in doplnkova_vysvetleni.keys():
-        if k not in kandidati:
-            kandidati.append(k)
-
-    return kandidati[:max_slov]
+    slova_cista = [s.strip().lower() for s in slova if len(s) >= 8]
+    unik = []
+    for s in slova_cista:
+        if s not in unik:
+            unik.append(s)
+    return unik[:max_slov]
 
 
-def vytvor_slovnicek(blist, doplnkova_vysvetleni):
+def generuj_slovnicek(text: str, rocnik: int):
     """
-    Dostane list slov a slovník s vysvětleními.
-    Vrátí list řádků typu:
-    • slovo = vysvětlení
-      (pokud vysvětlení není známé, nechá jen linku ________)
+    Vrátí seznam (slovo, vysvětlení/None).
+    - pokud máme ruční definici, použijeme ji,
+    - jinak necháme prostor pro doplnění.
     """
-    vystup = []
-    for slovo in blist:
-        if slovo in doplnkova_vysvetleni:
-            radek = f"• {slovo} = {doplnkova_vysvetleni[slovo]}"
+    kandidati = vyber_slovicka(text, max_slov=10)
+    vysledky = []
+    for slovo in kandidati:
+        vysvetleni = RUČNI_SLOVNIK.get(slovo)
+        vysledky.append((slovo, vysvetleni))
+    return vysledky
+
+
+# -------------------------
+# DOCX GENERÁTOR – PRACOVNÍ LIST
+# -------------------------
+
+def create_pracovni_list_docx(rocnik: int, text: str, nazev: str, lmp: bool = False) -> BytesIO:
+    doc = Document()
+
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(11)
+
+    # Nadpis
+    nadpis = f"EdRead AI – pracovní list ({rocnik}. ročník)"
+    if lmp:
+        nadpis += " – LMP/SPU verze"
+    doc.add_heading(nadpis, level=1)
+
+    doc.add_paragraph(f"Název textu: {nazev}")
+    doc.add_paragraph("Jméno žáka: ____________________________")
+    doc.add_paragraph("")
+
+    # Dramatizace
+    doc.add_heading("1. Úvodní dramatizace", level=2)
+    doc.add_paragraph(get_dramatizace(rocnik))
+
+    # Text pro žáky
+    doc.add_heading("2. Text pro čtení", level=2)
+    if lmp:
+        doc.add_paragraph(
+            "Tato verze je zkrácená a více členěná pro jednodušší čtení.\n"
+        )
+    zjed = zjednodus_text(text, rocnik)
+    doc.add_paragraph(zjed if zjed else "(Text nebyl vložen.)")
+    doc.add_page_break()
+
+    # Slovníček
+    doc.add_heading("3. Slovníček pojmů", level=2)
+    slovicka = generuj_slovnicek(text, rocnik)
+    if not slovicka:
+        doc.add_paragraph("V tomto textu nebyla nalezena žádná delší složitější slova.")
+    else:
+        for slovo, vysvetleni in slovicka:
+            if vysvetleni:
+                doc.add_paragraph(f"• {slovo} = {vysvetleni}")
+            else:
+                doc.add_paragraph(f"• {slovo} = _______________________________")
+
+    doc.add_page_break()
+
+    # Otázky – jednoduchá, obecná sada podle ročníku
+    doc.add_heading("4. Otázky k textu – A/B/C", level=2)
+
+    # A – najdi v textu (porozumění)
+    doc.add_paragraph("A) Najdi v textu (porozumění):")
+    if rocnik == 3:
+        doc.add_paragraph("1. Kdo v textu vyhrává hru? Jak se to pozná?", style=None)
+        doc.add_paragraph("2. Které zvíře je podle textu nejslabší?", style=None)
+    elif rocnik == 4:
+        doc.add_paragraph("1. Který věneček byl v textu hodnocen nejlépe?", style=None)
+        doc.add_paragraph("2. Který věneček byl nejdražší a proč cena neodpovídala kvalitě?", style=None)
+    elif rocnik == 5:
+        doc.add_paragraph("1. Proč se ve světě podle textu mluví o obezitě?", style=None)
+        doc.add_paragraph("2. Jakou roli hrají sladkosti v jídelníčku lidí?", style=None)
+
+    doc.add_paragraph("")
+
+    # B – přemýšlení / vysvětlení
+    doc.add_paragraph("B) Přemýšlej a vysvětli:")
+    if rocnik == 3:
+        doc.add_paragraph("3. Proč je důležité znát pravidla hry, než začneme hrát?", style=None)
+    elif rocnik == 4:
+        doc.add_paragraph("3. Jak poznáš podle textu, že je zákusek poctivě vyrobený?", style=None)
+    elif rocnik == 5:
+        doc.add_paragraph("3. Proč chtějí někteří lidé ‚light‘ sladkosti?", style=None)
+
+    doc.add_paragraph("")
+
+    # C – můj názor
+    doc.add_paragraph("C) Můj názor:")
+    doc.add_paragraph("4. Napiš, co si o tématu textu myslíš ty. Souhlasíš s tím, co se v textu říká? Proč ano / ne?")
+    doc.add_paragraph("")
+
+    # Sebehodnocení
+    doc.add_heading("5. Sebehodnocení", level=2)
+    doc.add_paragraph("Označ, jak se ti dnes pracovalo s textem (zakroužkuj nebo vybarvi):")
+    doc.add_paragraph("🙂 Rozuměl/a jsem textu dobře.")
+    doc.add_paragraph("😐 Něčemu jsem nerozuměl/a.")
+    doc.add_paragraph("☹ Text byl pro mě hodně těžký.")
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+# -------------------------
+# DOCX – METODICKÝ LIST
+# -------------------------
+
+def create_metodika_docx(rocnik: int, nazev: str) -> BytesIO:
+    doc = Document()
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(11)
+
+    doc.add_heading("METODICKÝ LIST PRO UČITELE", level=1)
+    doc.add_paragraph(f"Ročník: {rocnik}. třída")
+    doc.add_paragraph(f"Název textu: {nazev}")
+    doc.add_paragraph("")
+
+    # Cíle hodiny
+    doc.add_heading("1. Cíle hodiny", level=2)
+    doc.add_paragraph("• rozvoj čtenářské gramotnosti (porozumění textu, práce s informací),")
+    doc.add_paragraph("• práce se slovní zásobou (slovníček pojmů),")
+    doc.add_paragraph("• rozlišení faktu a názoru,")
+    doc.add_paragraph("• formulace vlastního názoru na základě textu.")
+    doc.add_paragraph("")
+
+    # RVP ZV – jazyk a jazyková komunikace
+    doc.add_heading("2. Vazba na RVP ZV – Jazyk a jazyková komunikace", level=2)
+    doc.add_paragraph(
+        "Žák na úrovni 1. stupně ZŠ zejména:\n"
+        "• čte s porozuměním jednoduché texty, plynule a s přiměřenou rychlostí,\n"
+        "• vyhledává v textu klíčové informace,\n"
+        "• rozlišuje podstatné a okrajové informace,\n"
+        "• rozlišuje informaci a názor,\n"
+        "• vyjadřuje vlastní názor na přečtený text a tento názor zdůvodní."
+    )
+    doc.add_paragraph("")
+
+    # Doporučený průběh hodiny
+    doc.add_heading("3. Doporučený průběh hodiny (45 min)", level=2)
+    doc.add_paragraph("1) Úvodní dramatizace (5–7 min) – aktivace zkušeností žáků, naladění na téma.")
+    doc.add_paragraph("2) Čtení textu (10–15 min) – individuální / společné, podtrhávání klíčových informací.")
+    doc.add_paragraph("3) Práce s otázkami A/B/C (15–20 min) – vyhledání, vysvětlení, názor.")
+    doc.add_paragraph("4) Sebehodnocení (5 min) – žák reflektuje, čemu rozuměl a co bylo těžké.")
+    doc.add_paragraph("")
+
+    # Specifika podle ročníku
+    doc.add_heading("4. Specifika podle ročníku", level=2)
+    if rocnik == 3:
+        doc.add_paragraph(
+            "3. třída (Karetní hra):\n"
+            "• text má charakter návodu – důležité je porozumět pravidlům,\n"
+            "• vizuální podpora: pyramida zvířat + zvířátka k vystřižení,\n"
+            "• zaměřit se na čtení s porozuměním, kdo koho ‚přebíjí‘.\n"
+        )
+    elif rocnik == 4:
+        doc.add_paragraph(
+            "4. třída (Věnečky):\n"
+            "• text kombinuje popis a hodnocení (argumentace),\n"
+            "• žáci pracují i s tabulkou (nesouvislý text),\n"
+            "• vhodné je porovnat vlastní zkušenost s cukrárnou s hodnocením v textu.\n"
+        )
+    elif rocnik == 5:
+        doc.add_paragraph(
+            "5. třída (Sladké mámení):\n"
+            "• argumentační text o sladkostech, obezitě a složení potravin,\n"
+            "• vhodné pro diskuzi o zdraví, míře sladkostí a reklame,\n"
+            "• cílem není strašit, ale vést žáky k přemýšlení.\n"
+        )
+
+    # Poznámka k diferenciaci
+    doc.add_heading("5. Diferenciace (LMP/SPU)", level=2)
+    doc.add_paragraph(
+        "K textu je k dispozici i zjednodušená verze pracovního listu pro žáky s LMP/SPU:\n"
+        "• kratší věty,\n"
+        "• menší počet otázek,\n"
+        "• více prostoru pro zápis odpovědí,\n"
+        "• stejná struktura činností – dramatizace, čtení, otázky, sebehodnocení."
+    )
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+# -------------------------
+# DOCX – ZVÍŘÁTKA K PYRAMIDĚ (3. TŘÍDA)
+# -------------------------
+
+def create_zvirata_pyramida_docx() -> BytesIO:
+    """
+    Vytvoří jednoduchý list se zvířaty k vystřižení pro Karetní hru.
+    Použijeme text + emoji jako jednoduchou obrázkovou oporu.
+    """
+    doc = Document()
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(14)
+
+    doc.add_heading("Zvířátka k vystřižení – Karetní hra", level=1)
+    doc.add_paragraph(
+        "Vystřihni si zvířátka a nalep je do pyramidy podle toho, kdo je nejslabší a kdo nejsilnější."
+    )
+    doc.add_paragraph("Nejslabší zvíře bude dole, nejsilnější nahoře.")
+
+    # tabulka se zvířaty
+    zvirata = [
+        ("🐭", "myš"),
+        ("🐟", "sardinka"),
+        ("🦔", "ježek"),
+        ("🐟", "okoun"),
+        ("🦊", "liška"),
+        ("🦭", "tuleň"),
+        ("🦁", "lev"),
+        ("🐻‍❄️", "lední medvěd"),
+        ("🐊", "krokodýl"),
+        ("🐘", "slon"),
+        ("🐬", "kosatka"),
+        ("🦟", "komár"),
+        ("🦎", "chameleon (žolík)"),
+    ]
+
+    table = doc.add_table(rows=0, cols=2)
+    for emoji, nazev in zvirata:
+        row = table.add_row().cells
+        row[0].text = emoji
+        row[1].text = nazev
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+# -------------------------
+# HLAVNÍ UI – STREAMLIT
+# -------------------------
+
+st.subheader("1️⃣ Vyber ročník a vlož text")
+
+rocnik = st.selectbox("Ročník", options=[3, 4, 5], format_func=lambda x: f"{x}. třída")
+default_nazev = {
+    3: "Karetní hra",
+    4: "Věnečky",
+    5: "Sladké mámení",
+}.get(rocnik, "Text")
+
+nazev_textu = st.text_input("Název textu", value=default_nazev)
+
+vstupni_text = st.text_area(
+    "Vlož původní text (např. Karetní hra / Věnečky / Sladké mámení):",
+    height=300,
+)
+
+st.write("---")
+st.subheader("2️⃣ Vygeneruj materiály")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if st.button("📄 Pracovní list (běžná verze)"):
+        if not vstupni_text.strip():
+            st.error("Nejprve vlož text.")
         else:
-            radek = f"• {slovo} = _______________________________"
-        vystup.append(radek)
-    return vystup
+            buf = create_pracovni_list_docx(rocnik, vstupni_text, nazev_textu, lmp=False)
+            st.download_button(
+                "⬇ Stáhnout pracovní list (DOCX)",
+                data=buf.getvalue(),
+                file_name=f"pracovni_list_{rocnik}trida.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
 
+with col2:
+    if st.button("📄 Pracovní list (LMP/SPU)"):
+        if not vstupni_text.strip():
+            st.error("Nejprve vlož text.")
+        else:
+            buf_lmp = create_pracovni_list_docx(rocnik, vstupni_text, nazev_textu, lmp=True)
+            st.download_button(
+                "⬇ Stáhnout LMP/SPU verzi (DOCX)",
+                data=buf_lmp.getvalue(),
+                file_name=f"pracovni_list_LMP_{rocnik}trida.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
 
-# ============================================================
-# 3) PYRAMIDA SÍLY PRO 3. TŘÍDU (KARETNÍ HRA)
-# ============================================================
+with col3:
+    if st.button("📘 Metodický list pro učitele"):
+        buf_m = create_metodika_docx(rocnik, nazev_textu)
+        st.download_button(
+            "⬇ Stáhnout metodiku (DOCX)",
+            data=buf_m.getvalue(),
+            file_name=f"metodicky_list_{rocnik}trida.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
 
-def vytvor_pyramidu_sily():
-    """
-    Vrací textovou 'pyramidu síly' zvířat z karetní hry.
-    Je to vizuální opora pro žáky 3. třídy.
-    (Příkladová hierarchie podle popisu pravidel:
-     - silnější zvíře může přebít slabší,
-     - myš je hodně slabá, kosatka hodně silná,
-     - chameleon je speciální – může být jako jiné zvíře.)
-    """
-    pyramid_text = (
-        "OBRÁZKOVÁ OPORA – PYRAMIDA SÍLY ZVÍŘAT\n"
-        "(Kdo může přebít koho ve hře)\n\n"
-        "   🦈 KOSATKA\n"
-        "        ↓ přebije\n"
-        "    🐘 SLON\n"
-        "        ↓ přebije\n"
-        "    🐊 KROKODÝL\n"
-        "        ↓ přebije\n"
-        "    🦁 LEV\n"
-        "        ↓ přebije\n"
-        "    🐻 LEDNÍ MEDVĚD / 🦭 TULEŇ\n"
-        "        ↓ přebije\n"
-        "    🐭 MYŠ\n\n"
-        "CHAMELEON = ŽOLÍK\n"
-        "• Chameleon se může tvářit jako jiné zvíře.\n"
-        "• Sám hrát nesmí.\n\n"
-        "Jak to čtu:\n"
-        "Když chci přebít slabší zvíře, musím dát silnější zvíře.\n"
-        "Nebo dám stejné zvíře, ale o jednu kartu navíc.\n"
+st.write("---")
+
+# Extra sekce jen pro 3. třídu – Karetní hra
+if rocnik == 3:
+    st.subheader("3️⃣ Speciálně pro Karetní hru – obrázková opora")
+    st.write(
+        "Pro 3. třídu můžeš navíc stáhnout list se zvířátky k vystřižení "
+        "pro pyramidu podle síly zvířat."
     )
-    return pyramid_text
-
-
-# ============================================================
-# 4) GENEROVÁNÍ DOKUMENTŮ WORD (pracovní list, metodika, LMP)
-# ============================================================
-
-def nastav_styl(document):
-    """Základní čitelný font pro celý dokument."""
-    style = document.styles['Normal']
-    style.font.name = 'Calibri'
-    style.font.size = Pt(12)
-
-
-def pridej_nadpis(document, text, velikost=16, bold=True):
-    p = document.add_paragraph()
-    run = p.add_run(text)
-    run.bold = bold
-    run.font.size = Pt(velikost)
-    return p
-
-
-def pridej_text(document, text, velikost=12, bold=False):
-    p = document.add_paragraph()
-    run = p.add_run(text)
-    run.bold = bold
-    run.font.size = Pt(velikost)
-    return p
-
-
-def vytvor_docx_pracovni_list(data, slovnicek_radky, zahrnout_pyramidu=False):
-    """
-    Vytvoří DOCX pracovní list pro žáka (běžná třída).
-    Obsah:
-    1. Dramatizace
-    2. Text pro žáky (zjednodušený)
-    3. Obrázková opora (pyramida) – pouze 3. třída
-    4. Slovníček
-    5. Otázky A/B/C
-    6. Sebehodnocení
-    """
-    document = Document()
-    nastav_styl(document)
-
-    # Hlavička
-    pridej_nadpis(document, f"EdRead AI – pracovní list ({data['trida']})")
-    pridej_text(document, f"Datum: {datetime.date.today().strftime('%d.%m.%Y')}")
-    pridej_text(document, "Jméno žáka: ____________________________")
-    pridej_text(document, "")
-
-    # 1) Dramatizace
-    pridej_nadpis(document, "1) Úvodní scénka (dramatizace)", 14)
-    pridej_text(document, data["dramatizace"])
-    pridej_text(document, "")
-
-    # 2) Text pro žáky
-    pridej_nadpis(document, "2) Text pro čtení", 14)
-    pridej_text(document, data["text_zjednoduseny"])
-    pridej_text(document, "")
-
-    # 3) Obrázková opora (pyramida síly zvířat) – jen pokud chceme
-    if zahrnout_pyramidu:
-        pridej_nadpis(document, "3) Obrázková opora – pyramida zvířat", 14)
-        pridej_text(document, vytvor_pyramidu_sily())
-        pridej_text(document, "")
-
-    # 4) Slovníček
-    pridej_nadpis(document, "Slovníček", 14)
-    for radek in slovnicek_radky:
-        pridej_text(document, radek)
-    pridej_text(document, "")
-
-    # 5) Otázky A/B/C
-    pridej_nadpis(document, "Otázky k textu", 14)
-
-    pridej_text(document, "OTÁZKY A: Najdi v textu odpověď", bold=True)
-    for ot in data["otazky_A"]:
-        pridej_text(document, ot)
-
-    pridej_text(document, "")
-    pridej_text(document, "OTÁZKY B: Vysvětli vlastními slovy", bold=True)
-    for ot in data["otazky_B"]:
-        pridej_text(document, ot)
-
-    pridej_text(document, "")
-    pridej_text(document, "OTÁZKY C: Tvůj názor / přemýšlení", bold=True)
-    for ot in data["otazky_C"]:
-        pridej_text(document, ot)
-
-    pridej_text(document, "")
-
-    # 6) Sebehodnocení
-    pridej_nadpis(document, "Sebehodnocení žáka", 14)
-    pridej_text(document, "Rozuměl/a jsem textu:    😃   🙂   😐")
-    pridej_text(document, "Našel/našla jsem odpovědi:    😃   🙂   😐")
-    pridej_text(document, "Umím to vysvětlit vlastními slovy:    😃   🙂   😐")
-
-    # hotovo -> vrátit bytes
-    bytes_io = BytesIO()
-    document.save(bytes_io)
-    bytes_io.seek(0)
-    return bytes_io
-
-
-def vytvor_docx_LMP(data, slovnicek_radky, zahrnout_pyramidu=False):
-    """
-    Vytvoří DOCX list pro žáky s potřebou podpory (LMP/SPU).
-    Je kratší, jasnější, větší rozsekání informací.
-    """
-    document = Document()
-    nastav_styl(document)
-
-    pridej_nadpis(document, f"EdRead AI – pracovní list (LMP/SPU) – {data['trida']}")
-    pridej_text(document, f"Datum: {datetime.date.today().strftime('%d.%m.%Y')}")
-    pridej_text(document, "Jméno žáka: ____________________________")
-    pridej_text(document, "")
-
-    # Dramatizace (zůstává, protože to je pochopitelné a vtahuje)
-    pridej_nadpis(document, "1) Začátek hodiny – scénka", 14)
-    pridej_text(document, data["dramatizace"])
-    pridej_text(document, "")
-
-    # Text LMP
-    pridej_nadpis(document, "2) Text pro čtení – jednodušší verze", 14)
-    pridej_text(document, data["text_LMP"])
-    pridej_text(document, "")
-
-    # Pyramida pro 3. třídu
-    if zahrnout_pyramidu:
-        pridej_nadpis(document, "3) Pomůcka k pochopení hry", 14)
-        pridej_text(document, vytvor_pyramidu_sily())
-        pridej_text(document, "")
-
-    # Slovníček – u LMP je extra důležité
-    pridej_nadpis(document, "Slovníček slov", 14)
-    for radek in slovnicek_radky:
-        pridej_text(document, radek)
-    pridej_text(document, "")
-
-    # Méně otázek, víc vedení
-    pridej_nadpis(document, "Otázky", 14)
-    pridej_text(document, "1) O čem text byl? (Napiš 1 větu.)")
-    pridej_text(document, "______________________________________")
-    pridej_text(document, "2) Řekni něco, co bylo DOBRÉ.")
-    pridej_text(document, "______________________________________")
-    pridej_text(document, "3) Řekni něco, co bylo ŠPATNÉ / PROBLÉM.")
-    pridej_text(document, "______________________________________")
-
-    pridej_text(document, "")
-    pridej_nadpis(document, "Jak jsem to zvládl/a", 14)
-    pridej_text(document, "Bylo to pro mě:   😊 snadné   😐 střední   😟 těžké")
-
-    bytes_io = BytesIO()
-    document.save(bytes_io)
-    bytes_io.seek(0)
-    return bytes_io
-
-
-def vytvor_docx_metodika(data):
-    """
-    Vytvoří metodický list pro učitele:
-    - cíl hodiny
-    - vazba na RVP ZV (čtenářská gramotnost)
-    - návrh struktury hodiny
-    - co sledovat u žáků
-    """
-    document = Document()
-    nastav_styl(document)
-
-    pridej_nadpis(document, "METODICKÝ LIST PRO UČITELE", 16)
-
-    pridej_text(document, f"Ročník: {data['trida']}", bold=True)
-    pridej_text(document, f"Datum: {datetime.date.today().strftime('%d.%m.%Y')}")
-    pridej_text(document, "")
-
-    # Cíl hodiny
-    pridej_nadpis(document, "1) Cíl hodiny", 14)
-    pridej_text(document,
-        "- Rozvoj čtenářské gramotnosti.\n"
-        "- Porozumění textu (co se děje, kdo co říká, jaké jsou pravidla / hodnocení).\n"
-        "- Vyhledávání informací v textu.\n"
-        "- Rozdíl FAKT vs. NÁZOR.\n"
-        "- Vlastní vyjádření (sebehodnocení)."
-    )
-    pridej_text(document, "")
-
-    # Vazba na RVP
-    pridej_nadpis(document, "2) Vazba na RVP ZV (Jazyk a jazyková komunikace)", 14)
-    for v in data["rvp_vystupy"]:
-        pridej_text(document, f"- {v}")
-    pridej_text(document, "")
-
-    # Struktura hodiny
-    pridej_nadpis(document, "3) Doporučený průběh hodiny (45 minut)", 14)
-    pridej_text(document,
-        "a) MOTIVACE / DRAMATIZACE (5–7 min)\n"
-        "   - krátká scénka = vstup do tématu\n"
-        "   - cílem je aktivovat zkušenost žáků ještě před čtením\n\n"
-        "b) ČTENÍ TEXTU (10–15 min)\n"
-        "   - čteme upravený text pro daný ročník\n"
-        "   - vyjasníme si těžká slova pomocí slovníčku\n"
-        "   - u 3. třídy ukážeme pyramidu síly zvířat jako vizuální oporu\n\n"
-        "c) PRÁCE S OTÁZKAMI (15 min)\n"
-        "   - A = najdi v textu (porozumění)\n"
-        "   - B = vysvětli vlastními slovy (vysvětlení významu)\n"
-        "   - C = názor / hodnocení (kritické myšlení)\n\n"
-        "d) SEBEHODNOCENÍ (5 min)\n"
-        "   - žák označí, jak tomu rozuměl a co bylo těžké\n"
-        "   - učitel získá okamžitou zpětnou vazbu"
-    )
-    pridej_text(document, "")
-
-    # Pozorování učitele
-    pridej_nadpis(document, "4) Na co se dívat (diagnostika učitele)", 14)
-    pridej_text(document,
-        "- Kdo dokáže najít odpověď přesně v textu?\n"
-        "- Kdo umí převyprávět vlastními slovy?\n"
-        "- Kdo zvládá rozlišit fakt vs. názor?\n"
-        "- Kdo se ztrácí ve slovníčku nebo nerozumí pojmům?\n"
-        "- U žáků s LMP/SPU sleduji spíš pochopení hlavní myšlenky, ne jazykovou přesnost."
-    )
-
-    bytes_io = BytesIO()
-    document.save(bytes_io)
-    bytes_io.seek(0)
-    return bytes_io
-
-
-# ============================================================
-# 5) STREAMLIT UI
-# ============================================================
-
-st.set_page_config(page_title="EdRead AI – školní prototyp", layout="centered")
-
-st.title("EdRead AI – Generátor pracovních listů")
-st.write("Prototyp pro diplomovou práci: čtenářská gramotnost, RVP ZV, diferenciace, LMP/SPU.")
-
-# výběr textu
-vyber_text = st.selectbox(
-    "Vyber text / ročník:",
-    list(TEXTY.keys())
-)
-
-data = TEXTY[vyber_text]
-
-st.subheader("Náhled základních parametrů")
-st.write(f"Ročník: {data['trida']}")
-st.write("Dramatizace (úvod hodiny):")
-st.write(data["dramatizace"])
-
-st.write("Zjednodušená verze textu pro žáky:")
-st.write(data["text_zjednoduseny"])
-
-st.write("Verze pro žáky s LMP/SPU:")
-st.write(data["text_LMP"])
-
-# slovníček – vygenerujeme
-kandidati_slov = navrhni_slovicka(
-    data["text_puvodni"],
-    data["slovnik_doplnkova_vysvetleni"],
-    max_slov=10
-)
-slovnicek_radky = vytvor_slovnicek(
-    kandidati_slov,
-    data["slovnik_doplnkova_vysvetleni"]
-)
-
-st.write("Náhled slovníčku (část):")
-for r in slovnicek_radky:
-    st.text(r)
-
-# rozhodnutí, jestli má být přidána pyramida
-zahrnout_pyramidu = (data["trida"] == "3. třída")
-
-st.markdown("---")
-
-st.subheader("Stáhnout materiály")
-
-# pracovní list běžná verze
-docx_bytes_pracovni = vytvor_docx_pracovni_list(
-    data,
-    slovnicek_radky,
-    zahrnout_pyramidu=zahrnout_pyramidu
-)
-st.download_button(
-    label="📄 Stáhnout pracovní list (běžná verze)",
-    data=docx_bytes_pracovni,
-    file_name=f"pracovni_list_{data['trida'].replace(' ', '')}_{datetime.date.today()}.docx",
-    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-)
-
-# pracovní list LMP/SPU
-docx_bytes_LMP = vytvor_docx_LMP(
-    data,
-    slovnicek_radky,
-    zahrnout_pyramidu=zahrnout_pyramidu
-)
-st.download_button(
-    label="📄 Stáhnout pracovní list – LMP / SPU",
-    data=docx_bytes_LMP,
-    file_name=f"pracovni_list_LMP_{data['trida'].replace(' ', '')}_{datetime.date.today()}.docx",
-    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-)
-
-# metodika
-docx_bytes_metodika = vytvor_docx_metodika(data)
-st.download_button(
-    label="📘 Stáhnout metodický list pro učitele",
-    data=docx_bytes_metodika,
-    file_name=f"metodika_{data['trida'].replace(' ', '')}_{datetime.date.today()}.docx",
-    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-)
-
-st.markdown("---")
-st.caption("EdRead AI – prototyp určený pro diplomovou práci. Všechny texty vycházejí z platného RVP ZV.")
+    if st.button("🃏 Zvířátka k pyramidě (Karetní hra)"):
+        buf_z = create_zvirata_pyramida_docx()
+        st.download_button(
+            "⬇ Stáhnout zvířátka k vystřižení (DOCX)",
+            data=buf_z.getvalue(),
+            file_name="zviratka_karetni_hra.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
