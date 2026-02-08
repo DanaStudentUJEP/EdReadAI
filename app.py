@@ -1,8 +1,8 @@
-# app.py — EdRead AI (finální úprava dle požadavků)
-# ✅ pyramidová okýnka = stejná velikost jako kartičky (na 3 sloupce)
-# ✅ dramatizace Karetní hra = více zapojení žáků (bez instrukční věty učitele o pořadí)
-# ✅ režim „Vlastní text“ + volba ročníku (1–5) zachován
-# ✅ 4 DOCX výstupy: PLNÝ / ZJEDNODUŠENÝ / LMP-SPU / METODIKA
+# app.py — EdRead AI (opravená verze dle posledních připomínek)
+# ✅ ODSTRANĚNA věta z dramatizace: „Nejdřív krátká scénka, pak slovníček...“
+# ✅ PYRAMIDA (sloupec okýnek) = VĚTŠÍ okýnka než kartičky, aby se kartičky vždy vešly
+# ✅ Zůstává: 4 DOCX výstupy (PLNÝ / ZJEDNODUŠENÝ / LMP-SPU / METODIKA)
+# ✅ Zůstává: režim „Vlastní text“ + volba ročníku (1–5)
 
 import re
 from datetime import datetime
@@ -88,6 +88,17 @@ def doc_to_bytes(doc):
     doc.save(buf)
     buf.seek(0)
     return buf
+
+def compact_paragraph(p):
+    """Zmenší mezery v odstavci (hlavně pro buňky tabulek)."""
+    pf = p.paragraph_format
+    pf.space_before = Pt(0)
+    pf.space_after = Pt(0)
+    pf.line_spacing = 1.0
+
+def compact_cell(cell):
+    for p in cell.paragraphs:
+        compact_paragraph(p)
 
 
 # ---------------------------
@@ -215,7 +226,7 @@ Věneček č. 2
 „Vrátit výuční list!“ vykřikuje po dvou soustech z dalšího věnečku. „Tohle je špatné. Je to sražený krém. Vlastně se ani nedá říct krém, protože tohle je spíše vyšlehaný margarín. Nejenže to pudink ani vzdáleně nepřipomíná, ale navíc má chemickou pachuť, ochutnejte,“ vybízí mě. Nepříjemná stopa opravdu zůstává vzadu na patře. „Navíc tam není ani stopa rumu. A ten korpus? Buď ho tvořili podle špatného receptu, nebo recept velice ošidili. Správné odpalované těsto má mít viditelné drážky, jak se zdobícím pytlíkem stříkalo na plech. Tohle je slité, bez vzorku a tvrdé.“
 
 Věneček č. 3
-„Tady je naopak výrazně cítit rum, to je dobře. Jenže když ochutnáte, dojde vám proč. Tou vůní chtěli jen přebít absenci jakýchkoli jiných chutí,“ míní hodnotitelka. „Vůbec netuším, z čeho tohle vyrobili, možná vyšlehaný margarín nebo rostlinná šlehačka. Navíc se to srazilo! Jak si mohou dovolit tohle prodávat? Tohle je také na vrácení výučního listu. Zkuste zakrojit lžičku do korpusu — přepečená hmota, mokvavá a dole ztvrdlá. Vůbec se nevytvarovala, podobně jako u druhého věnečku.“
+„Tady je naopak výrazně cítit rum, to je dobře. Jenže když ochutnáte, dojde vám proč. Tou vůní chtěli jen přebít absenci jakýchkoli jiných chutí,“ míní hodnotitelka. „Vůbec netouším, z čeho tohle vyrobili, možná vyšlehaný margarín nebo rostlinná šlehačka. Navíc se to srazilo! Jak si mohou dovolit tohle prodávat? Tohle je také na vrácení výučního listu. Zkuste zakrojit lžičku do korpusu — přepečená hmota, mokvavá a dole ztvrdlá. Vůbec se nevytvarovala, podobně jako u druhého věnečku.“
 
 Věneček č. 4
 „Nejhezčí věneček. Na první pohled. Krásně žlutá náplň, takhle vypadá pudink. Konečně! Jen je škoda, že tam vůbec není cítit rum. Oceňuji, že dodrželi recepturu. Ten pudink mohl být trochu více nadlehčený máslem, zdá se, že nedodrželi poměr 250 gramů másla na litr pudinku, ale to není taková tragédie. Je to dobré. A hmota se vyloženě povedla. Je světlá, zlatavá, vláčná, měkká, ale zároveň lehce křupavá, není přepečená, ani nedopečená, ani zestárlá. Tohle dělal cukrář, který své řemeslo umí.“
@@ -223,7 +234,7 @@ Věneček č. 4
 Věneček č. 5
 „Na první pohled vypadá hezky, drážky korpusu vypadají, jak mají, ale tím to končí. Tohle je chemický pudink, s vodou smíchaný prášek, nevařilo se to s mlékem. Nejenže to nemá chuť, ale je to tou chemií cítit. Těsto je staré, ztvrdlé… Tento cukrář by u mě propadl, katastrofa.”
 
-Než paní Fornůskové prozradím jména cukráren, přináším nesoutěžní doplňkové vzorky zákusků, kterými chci dát podnikům druhou šanci — napravit věnečkový dojem a zlomit verdikt. Podaří se to jedinému zákusku: štrúdlu s tvarohem a višněmi. „Hezky vypadá a je dobrý. Je nejspíše upečený z průmyslově vyráběného listového těsta, ale to je normální, dělá to tak většina cukráren. Vlastně spíše připomíná těsto plundrové, protože nelistuje, jak by mělo, ale nikde není psáno, že by štrúdl musel nutně být z listového těsta… Tvaroh je akorát sladký, utřený do jemna, višně chutnají jako višně. Tohle je můj vítěz druhého kola,“ pronese jednoznačně. „A o těch dalších raději pomlčme.“
+Než paní Fornůskové prozradím jména cukráren, přináším nesoutěžní doplňkové vzorky zákusků, kterými chci dát podnikům druhou šanci — napravit věnečkový dojem a zlomit verdikt. Podaří se to jedinému zákusku: štrúdlu s tvarohem a višněmi. „Hezky vypadá a je dobrý. Je nejspíše upečený z průmyslově vyráběného listového těsta, ale to je normální, dělá to tak většina cukráren. Vlastně spíše připomíná těsto plundrové, protože nelistuje, jak by mělo… Tvaroh je akorát sladký, utřený do jemna, višně chutnají jako višně. Tohle je můj vítěz druhého kola,“ pronese jednoznačně. „A o těch dalších raději pomlčme.“
 
 Když odtajním cukrárny, které se schovávaly za čísly výrobků, vyjde najevo, že vítězný věneček i štrúdl jsou totiž z „jednoho těsta“, a to z cukrárny Mámení ve stejnojmenné pasáži. „Vida, na tuto cukrárnu bych asi vsadila předem, kdybych věděla, že jejich výrobky zde budete mít,“ říká uznale cukrářka. „Ale jinak mě věnečky zklamaly…“
 
@@ -299,8 +310,7 @@ Tabulka ukazuje cenu a známku.
 
 
 # ---------------------------
-# Dramatizace (úvodní) – KARETNÍ HRA více zapojená
-# (bez věty o pořadí kroků – ta patří jen do metodiky)
+# Dramatizace – OPRAVA: žádná věta o pořadí kroků
 # ---------------------------
 
 DRAMA = {
@@ -330,7 +340,7 @@ DRAMA = {
 
 
 # ---------------------------
-# Karetní hra – tabulka „Kdo přebije koho?“ (zůstává)
+# Karetní hra – tabulka „Kdo přebije koho?“
 # ---------------------------
 
 KARETNI_ANIMALS = ["Kosatka", "Slon", "Krokodýl", "Lední medvěd", "Lev", "Tuleň", "Liška", "Okoun", "Ježek", "Sardinky", "Myš", "Komár"]
@@ -364,12 +374,16 @@ def add_karetni_matrix_table(doc: Document):
     hdr[0].text = ""
     for i, animal in enumerate(KARETNI_ANIMALS, start=1):
         hdr[i].text = animal
+        compact_cell(hdr[i])
 
     for row_name in KARETNI_ROWS:
         row_cells = table.add_row().cells
         row_cells[0].text = row_name
+        compact_cell(row_cells[0])
+
         for i, col_animal in enumerate(KARETNI_ANIMALS, start=1):
             row_cells[i].text = ""
+            compact_cell(row_cells[i])
             if col_animal in KARETNI_BEATERS.get(row_name, []):
                 set_cell_shading(row_cells[i], "D9D9D9")
 
@@ -378,6 +392,7 @@ def add_karetni_matrix_table(doc: Document):
             base_col = col_animal.lower()
             if base_col[:3] in base_row[:5]:
                 row_cells[i].text = ">"
+                compact_cell(row_cells[i])
 
     for r in table.rows:
         for c in r.cells:
@@ -394,9 +409,8 @@ def add_karetni_matrix_table(doc: Document):
 
 
 # ---------------------------
-# Karetní hra – kartičky (3 sloupce) + pyramidový sloupec
-# ✅ FIX: jedna kartička = jedna buňka (NE dělení šířky)
-# ✅ pyramidová okýnka mají stejný rozměr jako kartičky
+# Karetní hra – kartičky (3 sloupce) + pyramida (větší okýnka)
+# OPRAVA: pyramidová okýnka jsou VĚTŠÍ než kartičky, aby se kartičky vždy vešly.
 # ---------------------------
 
 ANIMAL_CARDS = [
@@ -431,9 +445,13 @@ PYRAMID_ORDER_TOP_TO_BOTTOM = [
     "chameleon (žolík)",
 ]
 
-# Rozměry kartičky / okýnka (malé rychlé na A4)
-CARD_W_CM = 5.6   # 3 sloupce: 3*5.6 = 16.8 cm (vejde se na A4)
-CARD_H_CM = 1.8
+# Kartička (na stříhání)
+CARD_W_CM = 5.6          # 3 sloupce se vejdou na A4
+CARD_H_CM = 1.85         # kartička
+
+# Okýnko pyramidy (na lepení) — VĚTŠÍ než kartička
+PYR_W_CM = 6.0           # o něco širší
+PYR_H_CM = 2.25          # výrazně vyšší (hlavní důvod, proč se kartičky nevešly)
 
 def add_pyramid_column(doc: Document):
     add_section_header(doc, "Zvířecí „pyramida“ síly (lepení)")
@@ -442,30 +460,31 @@ def add_pyramid_column(doc: Document):
     t = doc.add_table(rows=len(PYRAMID_ORDER_TOP_TO_BOTTOM) + 1, cols=1)
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
     t.autofit = False
-    set_fixed_col_width(t, [CARD_W_CM])
+    set_fixed_col_width(t, [PYR_W_CM])
 
     header = t.cell(0, 0)
     header.text = "NAHOŘE = NEJSILNĚJŠÍ"
+    compact_cell(header)
     header.paragraphs[0].runs[0].bold = True
     header.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
     header.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-    header.height = Cm(CARD_H_CM)
+    header.height = Cm(PYR_H_CM)
 
     for i in range(1, len(PYRAMID_ORDER_TOP_TO_BOTTOM) + 1):
         cell = t.cell(i, 0)
         cell.text = ""
+        compact_cell(cell)
         cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-        cell.height = Cm(CARD_H_CM)
+        cell.height = Cm(PYR_H_CM)
         set_cell_border(
             cell,
-            top={"sz": 12, "val": "single", "color": "000000"},
-            bottom={"sz": 12, "val": "single", "color": "000000"},
-            left={"sz": 12, "val": "single", "color": "000000"},
-            right={"sz": 12, "val": "single", "color": "000000"},
+            top={"sz": 14, "val": "single", "color": "000000"},
+            bottom={"sz": 14, "val": "single", "color": "000000"},
+            left={"sz": 14, "val": "single", "color": "000000"},
+            right={"sz": 14, "val": "single", "color": "000000"},
         )
 
     doc.add_paragraph("DOLE = NEJSLABŠÍ")
-
 
 def add_animal_cards_3cols(doc: Document):
     add_section_header(doc, "Kartičky zvířat (na stříhání)")
@@ -477,7 +496,6 @@ def add_animal_cards_3cols(doc: Document):
     table = doc.add_table(rows=rows, cols=cols)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.autofit = False
-    # ✅ každá buňka = jedna kartička => každá buňka má šířku CARD_W_CM
     set_fixed_col_width(table, [CARD_W_CM, CARD_W_CM, CARD_W_CM])
 
     idx = 0
@@ -486,19 +504,21 @@ def add_animal_cards_3cols(doc: Document):
             cell = table.cell(r, c)
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             cell.height = Cm(CARD_H_CM)
+
             set_cell_border(
                 cell,
-                top={"sz": 12, "val": "single", "color": "000000"},
-                bottom={"sz": 12, "val": "single", "color": "000000"},
-                left={"sz": 12, "val": "single", "color": "000000"},
-                right={"sz": 12, "val": "single", "color": "000000"},
+                top={"sz": 14, "val": "single", "color": "000000"},
+                bottom={"sz": 14, "val": "single", "color": "000000"},
+                left={"sz": 14, "val": "single", "color": "000000"},
+                right={"sz": 14, "val": "single", "color": "000000"},
             )
 
             if idx < len(ANIMAL_CARDS):
                 name, emoji = ANIMAL_CARDS[idx]
                 p = cell.paragraphs[0]
+                compact_paragraph(p)
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                # emoji velké + název
+
                 run1 = p.add_run(f"{emoji} ")
                 run1.font.size = Pt(18)
                 run2 = p.add_run(name)
@@ -506,6 +526,7 @@ def add_animal_cards_3cols(doc: Document):
                 run2.font.size = Pt(10)
             else:
                 cell.text = ""
+                compact_cell(cell)
             idx += 1
 
 
@@ -523,11 +544,13 @@ def add_two_col_table(doc: Document, title: str, rows):
     hdr = t.rows[0].cells
     hdr[0].text = "Položka"
     hdr[1].text = "Hodnota (%)"
+    compact_cell(hdr[0]); compact_cell(hdr[1])
 
     for a, b in rows:
         rr = t.add_row().cells
         rr[0].text = a
         rr[1].text = b
+        compact_cell(rr[0]); compact_cell(rr[1])
 
     for r in t.rows:
         for c in r.cells:
@@ -553,11 +576,13 @@ def add_venecky_table_and_podniky(doc: Document):
 
     for i, c in enumerate(cols):
         t.cell(0, i).text = c
+        compact_cell(t.cell(0, i))
 
     for row in VENECKY_TABLE:
         rr = t.add_row().cells
         for i, val in enumerate(row):
             rr[i].text = val
+            compact_cell(rr[i])
 
     for r in t.rows:
         for c in r.cells:
@@ -928,7 +953,7 @@ def build_doc_custom(version: str, title: str, grade: int, full_text: str) -> Do
 
 
 # ---------------------------
-# Metodika – pořadí kroků je TADY (ne v dramatizaci)
+# Metodika – pořadí kroků je jen zde
 # ---------------------------
 
 def build_methodology(text_name: str, grade: str, has_pyramid: bool = False) -> Document:
@@ -949,7 +974,7 @@ def build_methodology(text_name: str, grade: str, has_pyramid: bool = False) -> 
         add_hr(doc)
         add_section_header(doc, "Specifická aktivita (Karetní hra – pyramida)")
         doc.add_paragraph("Žáci vystřihnou kartičky (3 sloupce) a lepí je do sloupce okýnek.")
-        doc.add_paragraph("Okýnka jsou velikostně nastavena tak, aby se kartičky vešly bez přehýbání.")
+        doc.add_paragraph("Okýnka jsou velikostně nastavena větší než kartičky, aby se kartičky vešly bez přehýbání.")
         doc.add_paragraph("Pořadí: nahoře nejsilnější, dole nejslabší. Každé zvíře má vlastní úroveň.")
 
     add_hr(doc)
