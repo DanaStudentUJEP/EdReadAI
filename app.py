@@ -485,8 +485,8 @@ def add_pyramid_column(doc: Document):
         tr = table.rows[i]._tr
         trPr = tr.get_or_add_trPr()
         trHeight = OxmlElement('w:trHeight')
-        trHeight.set(qn('w:val'), str(int(Cm(1.5)._emu / 635)))  # approx; Word si to dorovná
-        trHeight.set(qn('w:hRule'), 'atLeast')
+      trHeight.set(qn('w:val'), str(Cm(4).twips))
+trHeight.set(qn('w:hRule'), 'atLeast')
         trPr.append(trHeight)
 
     # popisky nahoře/dole
@@ -921,3 +921,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
