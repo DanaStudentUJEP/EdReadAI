@@ -1,320 +1,94 @@
-# app.py
-# EdRead AI – stabilní prototyp pro diplomovou práci (3 texty)
-# Výstupy:
-# 1) Pracovní list – PLNY (DOCX)
-# 2) Pracovní list – ZJEDNODUSENY (DOCX)
-# 3) Pracovní list – LMP/SPU (DOCX)
-# 4) Metodický list pro učitele (DOCX)
-# 5) (Karetní hra) Kartičky se zvířaty (DOCX) – 3 sloupce, emoji, tisk
+# app.py — EdRead AI (prototyp pro DP)
+# Streamlit + python-docx
+# Vytváří: PLNY / ZJEDNODUSENY / LMP-SPU pracovní list + METODICKÝ LIST
+# Speciálně pro 3 texty: Karetní hra (3. třída), Věnečky (4. třída), Sladké mámení (5. třída)
 
-import io
 import re
-from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional
+from datetime import datetime
 
 import streamlit as st
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.shared import OxmlElement, qn
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 
-# -----------------------------
-# Pomocné funkce – DOCX styling
-# -----------------------------
-def set_doc_defaults(doc: Document, base_font_size: int = 11):
+# ---------------------------
+# Pomocné funkce (DOCX)
+# ---------------------------
+
+def set_doc_style(doc: Document):
     style = doc.styles["Normal"]
     style.font.name = "Calibri"
-    style.font.size = Pt(base_font_size)
+    style.font.size = Pt(11)
 
-def add_title(doc: Document, title: str, subtitle: Optional[str] = None):
+def add_title(doc: Document, title: str, subtitle: str = ""):
     p = doc.add_paragraph()
     run = p.add_run(title)
     run.bold = True
     run.font.size = Pt(16)
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
     if subtitle:
         p2 = doc.add_paragraph(subtitle)
         p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-def add_name_line(doc: Document):
-    p = doc.add_paragraph("JMÉNO: ________________________________   DATUM: ________________")
-    p.paragraph_format.space_after = Pt(8)
-
 def add_section_header(doc: Document, text: str):
     p = doc.add_paragraph()
-    run = p.add_run(text)
-    run.bold = True
-    run.font.size = Pt(12)
-    p.paragraph_format.space_before = Pt(8)
-    p.paragraph_format.space_after = Pt(4)
+    r = p.add_run(text)
+    r.bold = True
+    r.font.size = Pt(12)
 
-def add_instruction(doc: Document, text: str):
+def add_small_note(doc: Document, text: str):
     p = doc.add_paragraph(text)
-    p.paragraph_format.space_after = Pt(6)
+    p.runs[0].italic = True
 
-def add_bullets(doc: Document, items: List[str]):
-    for it in items:
-        p = doc.add_paragraph(it, style="List Bullet")
-        p.paragraph_format.space_after = Pt(0)
+def add_hr(doc: Document):
+    doc.add_paragraph("")
+
+def add_lines(doc: Document, count=2):
+    for _ in range(count):
+        doc.add_paragraph("______________________________________________")
+
+def set_cell_shading(cell, fill_hex: str):
+    """fill_hex např. 'D9D9D9'"""
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement('w:shd')
+    shd.set(qn('w:val'), 'clear')
+    shd.set(qn('w:color'), 'auto')
+    shd.set(qn('w:fill'), fill_hex)
+    tc_pr.append(shd)
 
 def set_cell_border(cell, **kwargs):
+    """
+    Nastaví okraje buňky. kwargs: top/bottom/left/right = {"sz":12,"val":"single","color":"000000"}
+    """
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
     tcBorders = tcPr.first_child_found_in("w:tcBorders")
     if tcBorders is None:
-        tcBorders = OxmlElement("w:tcBorders")
+        tcBorders = OxmlElement('w:tcBorders')
         tcPr.append(tcBorders)
-    for edge in ("top", "left", "bottom", "right"):
+
+    for edge in ("left", "top", "right", "bottom", "insideH", "insideV"):
         if edge in kwargs:
-            edge_data = kwargs[edge]
-            tag = "w:" + edge
+            edge_data = kwargs.get(edge)
+            tag = 'w:{}'.format(edge)
             element = tcBorders.find(qn(tag))
             if element is None:
                 element = OxmlElement(tag)
                 tcBorders.append(element)
             for k, v in edge_data.items():
-                element.set(qn("w:" + k), str(v))
-
-def make_table(doc: Document, rows: List[List[str]], col_widths_cm: Optional[List[float]] = None, header_bold=True):
-    table = doc.add_table(rows=0, cols=len(rows[0]))
-    table.style = "Table Grid"
-    for r_i, row in enumerate(rows):
-        cells = table.add_row().cells
-        for c_i, val in enumerate(row):
-            cells[c_i].text = val
-            if r_i == 0 and header_bold:
-                for run in cells[c_i].paragraphs[0].runs:
-                    run.bold = True
-            cells[c_i].paragraphs[0].paragraph_format.space_after = Pt(0)
-            cells[c_i].paragraphs[0].paragraph_format.space_before = Pt(0)
-        if col_widths_cm:
-            for c_i, w in enumerate(col_widths_cm):
-                cells[c_i].width = Cm(w)
-    return table
-
-def add_lines_for_answer(doc: Document, lines: int = 2):
-    for _ in range(lines):
-        doc.add_paragraph("__________________________________________________________________")
-
-def doc_to_bytes(doc: Document) -> bytes:
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    return buffer.getvalue()
+                element.set(qn('w:{}'.format(k)), str(v))
 
 
-# -----------------------------------
-# Slovníček – výběr + vysvětlení
-# -----------------------------------
-def extract_candidate_words(text: str, max_words: int = 12) -> List[str]:
-    stop = {
-        "název", "úlohy", "jměno", "správným", "řešením", "celé", "úlohy",
-        "maximálně", "bodů", "otázka", "body", "bod", "zdroj"
-    }
-    tokens = re.findall(r"[A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+", text)
-    tokens = [t.strip() for t in tokens if len(t.strip()) >= 7]
-    uniq = []
-    seen = set()
-    for t in tokens:
-        tl = t.lower()
-        if tl in stop:
-            continue
-        if tl not in seen:
-            seen.add(tl)
-            uniq.append(t)
-    return uniq[:max_words]
+# ---------------------------
+# Texty (plné + tabulky přesně)
+# ---------------------------
 
-def explain_word(word: str, glossary_map: Dict[str, str]) -> Optional[str]:
-    w = word.lower()
-    return glossary_map.get(w)
-
-def add_glossary_section(doc: Document, words: List[str], glossary_map: Dict[str, str]):
-    add_section_header(doc, "SLOVNÍČEK (na konci pracovního listu)")
-    add_instruction(doc, "Nejdřív si slovníček projdi s učitelem/učitelkou. Ke slovům si můžeš dopsat poznámku.")
-    for w in words:
-        expl = explain_word(w, glossary_map)
-        p = doc.add_paragraph()
-        run = p.add_run(f"• {w}: ")
-        run.bold = True
-        if expl:
-            doc.add_paragraph(f"  {expl}")
-        # vždy prostor na poznámku – bez rušivých vět
-        doc.add_paragraph("  Poznámka žáka: ________________________________________________")
-
-
-# -----------------------------------
-# Karetní hra – sloupec síly + kartičky
-# -----------------------------------
-KARETNI_ORDER_STRONG_TO_WEAK = [
-    ("kosatka", "🐬"),
-    ("slon", "🐘"),
-    ("krokodýl", "🐊"),
-    ("lední medvěd", "🐻‍❄️"),
-    ("lev", "🦁"),
-    ("tuleň", "🦭"),
-    ("liška", "🦊"),
-    ("okoun", "🐟"),
-    ("ježek", "🦔"),
-    ("sardinka", "🐟"),
-    ("myš", "🐭"),
-    ("komár", "🦟"),
-]
-KARETNI_CHAMELEON = ("chameleon (žolík)", "🦎")
-
-
-def add_strength_column_template(doc: Document):
-    """
-    Místo pyramidy: sloupec 12 úrovní (každé zvíře je na jiné úrovni).
-    Velikost okének odpovídá kartičkám (vystřižené kartičky se musí vejít).
-    """
-    add_section_header(doc, "SLOUPEC SÍLY ZVÍŘAT (pomůcka k porozumění pravidlům)")
-    add_instruction(doc, "Vystřihni kartičky se zvířaty a nalep je do sloupce podle síly.")
-    add_instruction(doc, "Úplně nahoře bude nejsilnější zvíře, úplně dole nejslabší.")
-    add_instruction(doc, "Chameleon je žolík – nelepuj ho do sloupce síly. Použiješ ho jen jako speciální kartu ve hře.")
-
-    # 12 řádků, 1 sloupec – velká okénka
-    t = doc.add_table(rows=12, cols=1)
-    t.style = "Table Grid"
-
-    # šířka okénka – aby se vešla kartička (emoji + název)
-    # (tahle hodnota funguje spolehlivě pro tisk na A4)
-    for r in range(12):
-        cell = t.cell(r, 0)
-        cell.text = ""
-        cell.width = Cm(16.5)
-        # okraje
-        set_cell_border(
-            cell,
-            top={"sz": 14, "val": "single", "color": "000000"},
-            bottom={"sz": 14, "val": "single", "color": "000000"},
-            left={"sz": 14, "val": "single", "color": "000000"},
-            right={"sz": 14, "val": "single", "color": "000000"},
-        )
-        # centrování + popisek úrovně
-        p = cell.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("Sem nalep kartičku")
-        run.font.size = Pt(10)
-
-    # štítky nahoře/dole
-    doc.add_paragraph("")
-    p_top = doc.add_paragraph("⬆️ Nahoře = NEJSILNĚJŠÍ")
-    p_top.runs[0].bold = True
-    p_bottom = doc.add_paragraph("⬇️ Dole = NEJSLABŠÍ")
-    p_bottom.runs[0].bold = True
-
-
-def add_animal_cards_3cols(doc: Document):
-    """
-    Kartičky: 3 sloupce, emoji + správný český název.
-    Bez siluet, bez internetu, tiskově použitelné.
-    """
-    add_section_header(doc, "KARTIČKY SE ZVÍŘATY (vystřihni)")
-    add_instruction(doc, "Kartičky vystřihni a použij je pro sloupec síly (a později při práci se hrou).")
-
-    animals = [
-        ("komár", "🦟"),
-        ("myš", "🐭"),
-        ("sardinka", "🐟"),
-        ("ježek", "🦔"),
-        ("okoun", "🐟"),
-        ("liška", "🦊"),
-        ("tuleň", "🦭"),
-        ("lev", "🦁"),
-        ("lední medvěd", "🐻‍❄️"),
-        ("krokodýl", "🐊"),
-        ("slon", "🐘"),
-        ("kosatka", "🐬"),
-        ("chameleon (žolík)", "🦎"),
-    ]
-
-    cols = 3
-    rows = (len(animals) + cols - 1) // cols
-    table = doc.add_table(rows=rows, cols=cols)
-    table.style = "Table Grid"
-
-    idx = 0
-    for r in range(rows):
-        for c in range(cols):
-            cell = table.cell(r, c)
-            cell.text = ""
-            cell.width = Cm(6.0)
-
-            if idx < len(animals):
-                name, emoji = animals[idx]
-
-                pr = cell.paragraphs[0]
-                pr.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-                p1 = cell.add_paragraph()
-                p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run_e = p1.add_run(emoji)
-                run_e.font.size = Pt(26)
-                run_e.font.name = "Segoe UI Emoji"
-
-                p2 = cell.add_paragraph()
-                p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run_n = p2.add_run(name)
-                run_n.bold = True
-                run_n.font.size = Pt(12)
-
-                p3 = cell.add_paragraph("__________")
-                p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            idx += 1
-
-
-def add_karetni_strength_matrix(doc: Document):
-    """
-    Matice síly (vizuální tabulka): emoji + názvy, tečka = silnější přebíjí slabší.
-    """
-    add_section_header(doc, "KDO PŘEBIJE KOHO? (tabulka podle pravidel)")
-    add_instruction(doc, "● = zvíře ve sloupci přebíjí zvíře v řádku.")
-
-    animals = KARETNI_ORDER_STRONG_TO_WEAK[:]  # 12 bez chameleona
-    headers = [""] + [f"{emo} {name}" for name, emo in animals]
-
-    rows = [headers]
-    names = [n for n, _ in animals]
-
-    for r_name, r_emo in animals:
-        row = [f"{r_emo} {r_name}"]
-        r_idx = names.index(r_name)
-        for c_name, c_emo in animals:
-            c_idx = names.index(c_name)
-            row.append("●" if c_idx < r_idx else "")
-        rows.append(row)
-
-    table = make_table(doc, rows, col_widths_cm=[5.2] + [2.0]*len(animals), header_bold=True)
-    for row in table.rows:
-        for cell in row.cells:
-            for p in cell.paragraphs:
-                for run in p.runs:
-                    run.font.size = Pt(9)
-
-
-# -----------------------------
-# Datové struktury pro texty
-# -----------------------------
-@dataclass
-class TextPack:
-    key: str
-    title: str
-    grade: int
-    points_max: int
-    full_text: str
-    simplified_text: str
-    lmp_text: str
-    dramatization: List[str]
-    questions: List[str]
-    glossary_map: Dict[str, str]
-    tables_spec: Optional[Dict[str, List[List[str]]]] = None
-
-
-# -----------------------------------
-# 1) Karetní hra (3. třída)
-# -----------------------------------
-KARETNI_FULL_TEXT = """NÁZEV ÚLOHY: KARETNÍ HRA
+FULL_KARETNI_TEXT = """NÁZEV ÚLOHY: KARETNÍ HRA\tJMÉNO:
 
 Správným řešením celé úlohy lze získat maximálně 12 bodů.
 
@@ -326,572 +100,872 @@ Všechny karty se rozdají mezi jednotlivé hráče. Hráči se snaží vynáše
 
 3. Pořadí karet
 Na každé kartě je zobrazen jeden živočich. V rámečku v horní části karty jsou namalováni živočichové, kteří danou kartu přebíjí.
+Živočichové, kteří daný druh přebíjí, jsou označeni vybarveným políčkem.
 Symbol > označuje, že každý živočich může být přebit větším počtem karet se živočichem stejného druhu.
+
 Příklad: Kosatku přebijí pouze dvě kosatky. Krokodýla přebijí dva krokodýli nebo jeden slon.
 Chameleon má ve hře obdobnou funkci jako žolík. Lze jej zahrát spolu s libovolnou jinou kartou a počítá se jako požadovaný druh živočicha. Nelze jej hrát samostatně.
 
 4. Průběh hry
 • Karty zamíchejte a rozdejte rovnoměrně mezi všechny hráče. Každý hráč si vezme své karty do ruky a neukazuje je ostatním.
+• Při hře ve třech hráčích odeberte před hrou z balíčku: 1 lva, 1 slona, 1 myš a od každého z dalších druhů živočichů 2 karty. Chameleon (žolík) zůstává ve hře.
 • Hráč po levé ruce rozdávajícího hráče začíná. Zahraje (vynese na stůl lícem nahoru) jednu kartu nebo více stejných karet.
-• Hráči hrají po směru hodinových ručiček a postupně se snaží přebít dříve zahrané karty.
+• Hráči hrají po směru hodinových ručiček a postupně se snaží přebít dříve zahrané karty. Při tom mají dvě možnosti — buď zahrají stejný počet karet živočicha, který přebíjí před ním zahraný druh, nebo použijí stejný druh živočicha jako předchozí hráč, v tom případě zahrají o jednu kartu více.
+Při přebíjení není povoleno hrát více karet, než je třeba. Vždy musí být zahráno buď přesně stejně karet „vyššího“ živočicha, nebo přesně o jednu kartu více stejného druhu.
 • Hráč, který nechce nebo nemůže přebít, se může vzdát tahu slovem pass.
-• Pokud se hráč dostane na řadu s tím, že nikdo z ostatních hráčů nepřebil jeho karty, vezme si tento hráč všechny karty, které leží uprostřed stolu. Tyto karty si položí před sebe a vynese další kartu nebo karty z ruky.
+• Pokud se hráč dostane na řadu s tím, že nikdo z ostatních hráčů nepřebil jeho karty zahrané v minulém kole (všichni ostatní hráči „passovali“), vezme si tento hráč všechny karty, které v tu chvíli leží uprostřed stolu. Tyto karty si položí na hromádku před sebe a vynese další kartu nebo karty z ruky. S kartami, které hráči v průběhu hry sebrali, se již dále nehraje.
 • Hráč, který jako první vynese svoji poslední kartu nebo karty z ruky, vítězí.
+
+Zdroj: Bláznivá ZOO. Doris Matthäusová a Frank Nestel, Mindok, s. r. o., 1999, upraveno.
 """
 
-KARETNI_SIMPLIFIED_TEXT = """NÁZEV ÚLOHY: KARETNÍ HRA (zjednodušený text)
-
-Cílem hry je zbavit se jako první všech karet z ruky.
-Hráči hrají po směru hodinových ručiček a snaží se přebít kartu nebo karty, které leží na stole.
-
-Silnější zvíře přebíjí slabší.
-Někdy můžeš přebít i stejným zvířetem, ale musíš dát o jednu kartu víc.
-
-Chameleon je žolík:
-hraje se vždy s jinou kartou a může se počítat jako jiné zvíře.
-Nemůže se hrát sám.
-
-Když nemůžeš přebít, řekneš „pass“.
-Kdo se zbaví karet jako první, vyhrává.
-"""
-
-KARETNI_LMP_TEXT = """NÁZEV ÚLOHY: KARETNÍ HRA (LMP/SPU)
-
-1) Cíl hry:
-Vyhrává ten, kdo bude mít jako první v ruce 0 karet.
-
-2) Jak se hraje:
-Hráč dá jednu kartu (nebo více stejných).
-Další hráč musí dát silnější kartu (nebo správný počet karet).
-
-3) Důležité:
-• Silnější zvíře přebíjí slabší.
-• Stejné zvíře přebije stejné zvíře jen tak, že dáš O JEDNU KARTU VÍCE.
-• Chameleon je žolík. Hraje se vždy s jinou kartou.
-• Když nemůžeš hrát, řekneš: pass.
-"""
-
-KARETNI_DRAMA = [
-    "Učitel/ka: „Máme novou hru, ale pravidla jsou trochu zamotaná.“",
-    "Žák A: „Já nevím, kdo je silnější… myš nebo lev?“",
-    "Žák B: „Zkusme si udělat pomůcku – sloupec síly zvířat.“",
-    "Učitel/ka: „Nejdřív krátká scénka, pak slovníček, a potom se pustíme do čtení pravidel.“",
-]
-
-KARETNI_QUESTIONS = [
-    "A) 1) Co je cílem hry?\n   A Nasbírat co nejvíce karet.\n   B Nemít v ruce žádné karty jako první.\n   C Vyhrát co nejvíce kol.\n   D Získat nejvíce silných zvířat.\n   Odpověď: ________",
-    "A) 2) Kolik karet je celkem ve hře?\n   Odpověď: ________",
-    "B) 3) Vysvětli vlastními slovy, co znamená „přebít kartu“.\n   ________________________________________________",
-    "A) 4) Kdy hráč řekne „pass“?\n   ________________________________________________",
-    "C) 5) K čemu pomáhá sloupec síly zvířat? Napiš jednou větou.\n   ________________________________________________",
-]
-
-KARETNI_GLOSSARY = {
-    "kombinace": "víc karet dohromady (např. dvě stejné).",
-    "pravidla": "to, co se musí ve hře dodržovat.",
-    "přebít": "dát silnější kartu (nebo správný počet karet).",
-    "vynést": "položit karty na stůl.",
-    "rovnoměrně": "stejně pro každého.",
-    "obdobnou": "podobnou.",
-    "funkci": "úkol, použití.",
-    "požadovaný": "takový, který je potřeba.",
-    "samostatně": "sám, bez jiné karty.",
-    "postupně": "po jednom, krok za krokem.",
-    "vzdát": "nehrát v tom kole.",
+# Sladké mámení – tabulky (přesný přepis z PDF obrázku sladke_p1)
+SLADKE_TABLES = {
+    "Jak často jíte čokoládu?": [
+        ("Alespoň jednou týdně", "22,7"),
+        ("Více než dvakrát týdně", "6,1"),
+        ("Méně než jednou týdně", "57,1"),
+    ],
+    "Jakou čokoládu máte nejraději?": [
+        ("Studentská pečeť", "32,5"),
+        ("Milka", "23,4"),
+        ("Orion mléčná", "20,8"),
+    ],
+    "Jaké čokoládové tyčinky jste jedl v posledních 12 měsících?": [
+        ("Margot", "29,9"),
+        ("Ledové kaštany", "29,2"),
+        ("Banán v čokoládě", "27,9"),
+        ("Deli", "27,0"),
+        ("Kofila", "24,8"),
+        ("Milena", "22,4"),
+        ("3 BIT", "19,5"),
+        ("Studentská pečeť", "19,4"),
+        ("Geisha", "15,0"),
+        ("Mars", "13,6"),
+    ],
+    "Jak často kupujete bonboniéry?": [
+        ("Dvakrát a více měsíčně", "1,7"),
+        ("Jednou měsíčně", "14,9"),
+        ("Jednou až dvakrát za 3 měsíce", "23,2"),
+        ("Méně než jedenkrát za 3 měsíce", "54,5"),
+        ("Neuvedeno", "5,7"),
+    ],
+    "Jaké bonboniéry jste koupili v posledních 12 měsících?": [
+        ("Laguna — mořské plody", "31,9"),
+        ("Figaro — Tatiana", "25,6"),
+        ("Figaro — Zlaťouš", "21,6"),
+        ("Tofifee", "19,6"),
+        ("Orion — Modré z nebe", "19,4"),
+        ("Nugeta — dezert", "17,6"),
+        ("Ferrero Rocher", "16,2"),
+        ("Merci", "15,7"),
+        ("Raffaello", "13,9"),
+        ("Mon Chéri", "13,5"),
+    ],
 }
 
-KARETNI_PACK = TextPack(
-    key="karetni",
-    title="Karetní hra",
-    grade=3,
-    points_max=12,
-    full_text=KARETNI_FULL_TEXT,
-    simplified_text=KARETNI_SIMPLIFIED_TEXT,
-    lmp_text=KARETNI_LMP_TEXT,
-    dramatization=KARETNI_DRAMA,
-    questions=KARETNI_QUESTIONS,
-    glossary_map=KARETNI_GLOSSARY,
-    tables_spec=None,
-)
-
-
-# -----------------------------------
-# 2) Sladké mámení (5. třída) – tabulka 100% dle PDF
-# -----------------------------------
-SLADKE_TABLE_ROWS = [
-    ["Češi a čokoláda (v %)", ""],
-    ["Jak často jíte čokoládu?", ""],
-    ["Alespoň jednou týdně", "22,7"],
-    ["Více než dvakrát týdně", "6,1"],
-    ["Méně než jednou týdně", "57,1"],
-    ["Jakou čokoládu máte nejraději?", ""],
-    ["Studentská pečeť", "32,5"],
-    ["Milka", "23,4"],
-    ["Orion mléčná", "20,8"],
-    ["Jaké čokoládové tyčinky jste jedl v posledních 12 měsících?", ""],
-    ["Margot", "29,9"],
-    ["Ledové kaštany", "29,2"],
-    ["Banán v čokoládě", "27,9"],
-    ["Deli", "27,0"],
-    ["Kofila", "24,8"],
-    ["Milena", "22,4"],
-    ["3 BIT", "19,5"],
-    ["Studentská pečeť (tyčinka)", "19,4"],
-    ["Geisha", "15,0"],
-    ["Mars", "13,6"],
-    ["Jak často kupujete bonboniéry?", ""],
-    ["Dvakrát a více měsíčně", "1,7"],
-    ["Jednou měsíčně", "14,9"],
-    ["Jednou až dvakrát za 3 měsíce", "23,2"],
-    ["Méně než jedenkrát za 3 měsíce", "54,5"],
-    ["Neuvedeno", "5,7"],
-    ["Jaké bonboniéry jste koupili v posledních 12 měsících?", ""],
-    ["Laguna – mořské plody", "31,9"],
-    ["Figaro – Tatiana", "25,6"],
-    ["Figaro – Zlatý nugát", "21,6"],
-    ["Tofifee", "19,6"],
-    ["Orion – Modré z nebe", "19,4"],
-    ["Nugátový dezert", "17,6"],
-    ["Ferrero Rocher", "16,2"],
-    ["Merci", "15,7"],
-    ["Raffaello", "13,9"],
-    ["Mon Chéri", "13,5"],
-]
-
-SLADKE_FULL_TEXT = """NÁZEV ÚLOHY: SLADKÉ MÁMENÍ
+FULL_SLADKE_TEXT = """NÁZEV ÚLOHY: SLADKÉ MÁMENÍ\tJMÉNO:
 
 Správným řešením celé úlohy lze získat maximálně 12 bodů.
 
-Níže je tabulka „Češi a čokoláda“ (údaje jsou v procentech).
-Čti ji pozorně – budeš z ní vyvozovat odpovědi.
-{{TAB_S}}
+Češi a čokoláda
+(Všechny údaje v tabulkách jsou v procentech.)
 
-Potom si přečti výchozí článek a odpověz na otázky.
+Euroamerickou civilizaci sužuje novodobá epidemie: obezita a s ní spojené choroby metabolismu, srdce a cév. Výrobci cukrovinek po celém vypaseném světě pocítili sílící poptávku po nízkokalorických čokoládách, light mlsání a dietních bonbonech. Až na české luhy a háje. „V našem rozsáhlém výzkumu se potvrdilo, že Češi netouží po nízkokalorickém mlsání, nechtějí mít dokonce ani na obalu větším písmem uvedený energetický obsah. Spotřebitelé nám v průzkumech trhu řekli, že to nechtějí slyšet: ,Vím, že hřeším, je to můj hřích a nechte mi ho,' “ říká Vašutová.
 
-Euroamerickou civilizaci sužuje novodobá epidemie: obezita a s ní spojené choroby metabolismu, srdce a cév.
-Výrobci cukrovinek po celém světě pocítili sílící poptávku po nízkokalorických čokoládách, light mlsání a dietních bonbonech.
-Až na české luhy a háje. Češi podle výzkumů netouží po nízkokalorickém mlsání a nechtějí ani výrazné upozornění na energetickou hodnotu.
+Ačkoli mnoho (převážně) hubnoucích žen tyto informace na obalech hledá, z celkové poptávky je to poměrně zanedbatelná část. „Před pár lety jsme celosvětově začali energetický obsah uvádět na přední straně výrobků. Zatímco jinde to odpovídalo přání spotřebitele, u nás to působí spíše jako rozmar výrobce,“ směje se Martin Walter, kolega Vašutové z Nestlé.
 
-Novodobí „alchymisté“ v laboratořích stále hledají náhražku cukru, která by měla dobrou sladivost, neměla nepříjemnou chuť ani pach a nezásobovala tělo zbytečnými kaloriemi.
-V posledních letech se používají například alditoly, ale často mají nižší sladivost.
-Nahradit sacharózu je stále problém.
+Nehledě na český nezájem, novodobí alchymisté v laboratořích stále hledají recept na zlato — náhražku rostlinného cukru, která by měla slušnou sladivost, neměla nepříjemnou chuť či pach a nezásobovala tělo zbytečnými kaloriemi. Podle expertky na cukrovinky z Vysoké školy chemicko-technologické Jany Čopíkové jsou hledači cukrovinového grálu na stopě. „V posledních letech se používají takzvané alditoly, což jsou sladidla s nižší energetickou hodnotou (např. sorbitol, xylitol, maltitol, pozn. red.). Ale pořád to není ono, protože mají zároveň nižší sladivost. Jedním z posledních objevů je však například látka zvaná polydextróza, která má skutečně nulovou energetickou hodnotu, ale nahradit sacharózu je prostě problém,“ dodává s úsměvem Jana Čopíková.
 
-Analytik doporučuje upřednostňovat složité cukry před jednoduchými cukry.
-Záleží však na situaci: pro rychlou energii mohou jednoduché cukry posloužit, ale pro večerní mlsání je lepší vybírat pečlivěji.
+Potravinářský analytik Petr Havel v zájmu zdraví doporučuje pátrat po sladkostech, které obsahují spíše složité cukry — nejlépe polysacharidy, jako je škrob, celulóza, vláknina — než jednoduché, což jsou kupříkladu glukóza — hroznový cukr, fruktóza — ovocný cukr. Ty totiž představují jen „prázdnou“, rychlou energii. „Samozřejmě záleží na tom, co chceme. Pokud to má být ,energie sbalená na cesty', pro rychlý přísun kalorií, pak jednoduché cukry poslouží výborně, ale na večerní mlsání u televize se vyplatí dát si s výběrem sladkostí trochu práci,“ míní.
+
+Podobně se podle něho dají laskominy rozdělit na vyloženě nezdravé a zdravější podle tuků, které obsahují. „Kakaové máslo se často nahrazuje jinými tuky, hlavně kvůli ceně. Některé z nich ale lidskému — a hlavně dětskému — zdraví neprospívají. Právě naopak,“ upozorňuje Havel. Konkrétně to jsou takzvané transmastné a vyšší mastné kyseliny, jako je kyselina palmitová nebo myristová. „Palmový a kokosový tuk zvyšují riziko kardiovaskulární choroby, stejně jako méně kvalitní ztužené tuky,“ doplňuje Havel.
+
+Jeden cukrovinářský trend je ale patrný i v našich zeměpisných šířkách. Odklon …
+
+Zdroj: Týden, 31. října 2011, 44/2011, s. 29, upraveno. (Průzkum agentury Median v roce 2010.)
 """
 
-SLADKE_SIMPLIFIED_TEXT = """NÁZEV ÚLOHY: SLADKÉ MÁMENÍ (zjednodušený text)
-
-Podívej se na tabulku „Češi a čokoláda“. Ukazuje, jak často lidé jedí čokoládu a co si kupují.
-{{TAB_S}}
-
-V článku se píše, že v Evropě a Americe je hodně obezity. Proto roste zájem o nízkokalorické sladkosti.
-V Česku ale lidé většinou light sladkosti moc nechtějí.
-
-Vědci hledají náhražku cukru, která:
-• sladí dobře,
-• nebude mít nepříjemnou chuť ani pach,
-• nebude mít moc kalorií.
-"""
-
-SLADKE_LMP_TEXT = """NÁZEV ÚLOHY: SLADKÉ MÁMENÍ (LMP/SPU)
-
-1) Tabulka „Češi a čokoláda“:
-{{TAB_S}}
-
-2) Co je důležité v textu:
-• Ve světě je hodně obezity.
-• Proto lidé chtějí sladkosti s méně kaloriemi.
-• V Česku o to lidé často nestojí.
-"""
-
-SLADKE_DRAMA = [
-    "Učitel/ka: „Představte si, že jste odborníci na sladkosti.“",
-    "Žák A: „Já bych jedl jen čokoládu!“",
-    "Žák B: „A co kdybychom chtěli sladké, ale zdravější?“",
-    "Učitel/ka: „Nejdřív krátká scénka, potom slovníček, a pak budeme číst text i tabulku.“",
+# Věnečky – tabulka přesně z PDF (venecky_p2)
+VENECKY_TABLE = [
+    ("1", "15", "4", "5", "2", "1", "3"),
+    ("2", "17", "4", "5", "5", "5", "5"),
+    ("3", "11,50", "5", "5", "5", "5", "5"),
+    ("4", "19", "2", "1", "2", "2", "2"),
+    ("5", "20", "3", "3", "5", "5", "4"),
 ]
 
-SLADKE_QUESTIONS = [
-    "A) 1) Který výrok je v rozporu s textem?\n   A Vědcům se podařilo najít ideální náhražku cukru.\n   B Obezita souvisí s nemocemi.\n   C Ve světě roste poptávka po nízkokalorických sladkostech.\n   D V Česku lidé většinou light sladkosti moc nechtějí.\n   Odpověď: ________",
-    "A) 2) Podle tabulky: Je správně, že více než polovina jí čokoládu méně než jednou týdně? Ano / Ne",
-    "B) 3) Proč je těžké najít dobrou náhražku cukru? Napiš vlastními slovy.\n   ________________________________________________",
-    "C) 4) Myslíš, že je dobré řešit „light“ sladkosti? Proč ano/ne?\n   ________________________________________________",
-]
-
-SLADKE_GLOSSARY = {
-    "epidemie": "když se nějaký problém hodně rozšíří mezi lidmi.",
-    "obezita": "velká nadváha, která může škodit zdraví.",
-    "metabolismus": "to, jak tělo zpracovává jídlo a energii.",
-    "nízkokalorický": "má málo kalorií (energie).",
-    "náhražka": "něco, co nahradí původní věc.",
-    "sladivost": "jak moc něco sladí.",
-    "kalorie": "energie z jídla.",
-    "alchymisté": "lidé, kteří něco „zázračně“ hledají – tady vědci v laboratoři.",
-    "upřednostňovat": "vybírat raději než něco jiného.",
-}
-
-SLADKE_PACK = TextPack(
-    key="sladke",
-    title="Sladké mámení",
-    grade=5,
-    points_max=12,
-    full_text=SLADKE_FULL_TEXT,
-    simplified_text=SLADKE_SIMPLIFIED_TEXT,
-    lmp_text=SLADKE_LMP_TEXT,
-    dramatization=SLADKE_DRAMA,
-    questions=SLADKE_QUESTIONS,
-    glossary_map=SLADKE_GLOSSARY,
-    tables_spec={"TAB_S": SLADKE_TABLE_ROWS},
-)
-
-
-# -----------------------------------
-# 3) Věnečky (4. třída) – tabulka 100% dle PDF
-# -----------------------------------
-VENECKY_TABLE_ROWS = [
-    ["Cukrárna", "Cena v Kč", "Vzhled", "Korpus", "Náplň", "Suroviny", "Celková známka (jako ve škole)"],
-    ["1", "15", "4", "5", "2", "1", "3"],
-    ["2", "17", "4", "5", "5", "5", "5"],
-    ["3", "11,50", "5", "5", "5", "5", "5"],
-    ["4", "19", "2", "1", "2", "2", "2"],
-    ["5", "20", "3", "3", "5", "5", "4"],
-]
-
-VENECKY_FULL_TEXT = """NÁZEV ÚLOHY: VĚNEČKY
+FULL_VENECKY_TEXT = """NÁZEV ÚLOHY: VĚNEČKY\tJMÉNO:
 
 Správným řešením celé úlohy lze získat maximálně 12 bodů.
 
-Přečti si text a všímej si, jak hodnotitelka popisuje chuť, krém a těsto.
+Věneček č. 2
+„Vrátit výuční list!“ vykřikuje po dvou soustech z dalšího věnečku. „Tohle je špatné. Je to sražený krém. Vlastně se ani nedá říct krém, protože tohle je spíše vyšlehaný margarín. Nejenže to pudink ani vzdáleně nepřipomíná, ale navíc má chemickou pachuť, ochutnejte,“ vybízí mě. Nepříjemná stopa opravdu zůstává vzadu na patře. „Navíc tam není ani stopa rumu. A ten korpus? Buď ho tvořili podle špatného receptu, nebo recept velice ošidili. Správné odpalované těsto má mít viditelné drážky, jak se zdobícím pytlíkem stříkalo na plech. Tohle je slité, bez vzorku a tvrdé.“
 
-Věneček č. 2: Hodnotitelce vadil sražený krém, chemická pachuť a tvrdý korpus bez drážek.
-Věneček č. 3: Rum je cítit, ale prý jen zakrývá, že zákusek nemá jiné chutě. Korpus je přepečený a dole ztvrdlý.
-Věneček č. 4: Vypadá nejlépe. Náplň vypadá jako pudink, korpus je vláčný a lehce křupavý.
-Věneček č. 5: Vypadá hezky, ale náplň je „chemický pudink“ z prášku a vody, těsto je staré a ztvrdlé.
+Věneček č. 3
+„Tady je naopak výrazně cítit rum, to je dobře. Jenže když ochutnáte, dojde vám proč. Tou vůní chtěli jen přebít absenci jakýchkoli jiných chutí,“ míní hodnotitelka. „Vůbec netuším, z čeho tohle vyrobili, možná vyšlehaný margarín nebo rostlinná šlehačka. Navíc se to srazilo! Jak si mohou dovolit tohle prodávat? Tohle je také na vrácení výučního listu. Zkuste zakrojit lžičku do korpusu — přepečená hmota, mokvavá a dole ztvrdlá. Vůbec se nevytvarovala, podobně jako u druhého věnečku.“
 
-Níže je tabulka hodnocení (přesně podle originálu):
-{{TAB_V}}
+Věneček č. 4
+„Nejhezčí věneček. Na první pohled. Krásně žlutá náplň, takhle vypadá pudink. Konečně! Jen je škoda, že tam vůbec není cítit rum. Oceňuji, že dodrželi recepturu. Ten pudink mohl být trochu více nadlehčený máslem, zdá se, že nedodrželi poměr 250 gramů másla na litr pudinku, ale to není taková tragédie. Je to dobré. A hmota se vyloženě povedla. Je světlá, zlatavá, vláčná, měkká, ale zároveň lehce křupavá, není přepečená, ani nedopečená, ani zestárlá. Tohle dělal cukrář, který své řemeslo umí.“
+
+Věneček č. 5
+„Na první pohled vypadá hezky, drážky korpusu vypadají, jak mají, ale tím to končí. Tohle je chemický pudink, s vodou smíchaný prášek, nevařilo se to s mlékem. Nejenže to nemá chuť, ale je to tou chemií cítit. Těsto je staré, ztvrdlé… Tento cukrář by u mě propadl, katastrofa.“
+
+Než paní Fornůskové prozradím jména cukráren, přináším nesoutěžní doplňkové vzorky zákusků, kterými chci dát podnikům druhou šanci — napravit věnečkový dojem a zlomit verdikt. Podaří se to jedinému zákusku: štrúdlu s tvarohem a višněmi. „Hezky vypadá a je dobrý. Je nejspíše upečený z průmyslově vyráběného listového těsta, ale to je normální, dělá to tak většina cukráren. Vlastně spíše připomíná těsto plundrové, protože nelistuje, jak by mělo, ale nikde není psáno, že by štrúdl musel nutně být z listového těsta… Tvaroh je akorát sladký, utřený do jemna, višně chutnají jako višně. Tohle je můj vítěz druhého kola,“ pronese jednoznačně. „A o těch dalších raději pomlčme.“
+
+Když odtajním cukrárny, které se schovávaly za čísly výrobků, vyjde najevo, že vítězný věneček i štrúdl jsou totiž z „jednoho těsta“, a to z cukrárny Mámení ve stejnojmenné pasáži. „Vida, na tuto cukrárnu bych asi vsadila předem, kdybych věděla, že jejich výrobky zde budete mít,“ říká uznale cukrářka. „Ale jinak mě věnečky zklamaly…“
+
+Zdroj: Týden, 31. října 2011, 44/2011, s. 31, upraveno, kráceno. Hodnocení šéfkuchařky Fornůskové
 """
 
-VENECKY_SIMPLIFIED_TEXT = """NÁZEV ÚLOHY: VĚNEČKY (zjednodušený text)
-
-Hodnotitelka ochutnává věnečky z různých cukráren.
-Nejvíc jí chutná věneček č. 4.
-Některé věnečky jsou špatné: krém je sražený nebo „chemický“ a těsto tvrdé.
-
-Tabulka hodnocení:
-{{TAB_V}}
-"""
-
-VENECKY_LMP_TEXT = """NÁZEV ÚLOHY: VĚNEČKY (LMP/SPU)
-
-Čteme o tom, jak paní hodnotí věnečky.
-• Věneček č. 4 je nejlepší.
-• Některé věnečky jsou tvrdé nebo „chemické“.
-
-Tabulka hodnocení:
-{{TAB_V}}
-"""
-
-VENECKY_DRAMA = [
-    "Učitel/ka: „Představte si, že jste ochutnávači v cukrárně.“",
-    "Žák A: „Já hodnotím hlavně chuť!“",
-    "Žák B: „A já bych koukal/a, jaké je těsto a krém.“",
-    "Učitel/ka: „Nejdřív scénka, potom slovníček a pak se vrátíme do textu a tabulky.“",
+# Přesný seznam podniků (jako v PDF)
+VENECKY_PODNIKY = [
+    ("1", "Cukrárna Věnečky, Praha 5"),
+    ("2", "Pekárna Krémová, Praha 1"),
+    ("3", "Cukrárna Větrníček, Praha 3"),
+    ("4", "Cukrárna Mámení, Praha 2"),
+    ("5", "Cukrárna Dortíček, Praha 6"),
 ]
 
-VENECKY_QUESTIONS = [
-    "A) 1) Který věneček neobsahuje pudink uvařený z mléka?\n   A č.2  B č.3  C č.4  D č.5\n   Odpověď: ________",
-    "A) 2) Ve kterém věnečku rum zakrývá, že chybí jiné chutě?\n   A č.2  B č.3  C č.4  D č.5\n   Odpověď: ________",
-    "A) 3) Který věneček je podle textu nejlepší? ________",
-    "B) 4) Který věneček je nejdražší a jakou má známku?\n   ________________________________________________",
-    "C) 5) Co je podle tebe důležité, aby byl zákusek „poctivý“? Napiš 2 věci.\n   1) __________________________\n   2) __________________________",
+
+# ---------------------------
+# Zjednodušené a LMP verze (jen text – BEZ plné verze)
+# ---------------------------
+
+SIMPLE_KARETNI_TEXT = """KARETNÍ HRA (zjednodušený text)
+
+Ve hře je 60 karet se zvířaty. Každý hráč dostane stejné množství karet.
+Cílem je zbavit se všech karet jako první.
+
+Hráči postupně vykládají (vynášejí) karty na stůl.
+Další hráč musí dát silnější zvíře, aby přebil předchozí kartu.
+Někdy může přebít i stejným zvířetem, ale musí dát o jednu kartu víc.
+
+Chameleon je žolík: může se přidat k jiné kartě a pomůže vytvořit potřebné zvíře.
+Sám se hrát nesmí.
+
+Když někdo nemůže nebo nechce přebít, řekne „pass“ a nehraje.
+Vyhrává ten, kdo se první zbaví všech karet.
+"""
+
+LMP_KARETNI_TEXT = """KARETNÍ HRA (LMP/SPU)
+
+1) Každý dostane karty.
+2) Hrajeme po jednom (po řadě).
+3) Chci být první, kdo už nemá žádné karty.
+
+Když někdo dá kartu na stůl, já musím dát silnější zvíře (nebo stejné zvíře, ale o jednu kartu víc).
+Když nemám, řeknu „pass“.
+
+Chameleon je žolík. Musí být vždy s jinou kartou.
+"""
+
+SIMPLE_SLADKE_TEXT = """SLADKÉ MÁMENÍ (zjednodušený text)
+
+Text říká, že v Evropě a Americe je problém obezita.
+Proto lidé chtějí nízkokalorické (méně kalorické) sladkosti.
+
+V Česku ale mnoho lidí nechce číst, kolik má sladkost energie.
+Vědci hledají sladidlo, které bude sladké, nebude mít divnou chuť ani pach a nebude mít kalorie.
+
+V textu se také mluví o tom, že existují jednoduché cukry (rychlá energie)
+a složité cukry (lepší pro tělo, když nechci jen rychlou energii).
+"""
+
+LMP_SLADKE_TEXT = """SLADKÉ MÁMENÍ (LMP/SPU)
+
+V textu se píše:
+• Mnoho lidí má obezitu.
+• Lidé proto chtějí sladkosti s méně kaloriemi.
+• Vědci hledají sladidlo bez kalorií.
+• Jsou jednoduché cukry (rychlá energie) a složité cukry (lepší volba).
+"""
+
+SIMPLE_VENECKY_TEXT = """VĚNEČKY (zjednodušený text)
+
+V textu hodnotitelka ochutnává věnečky z různých cukráren.
+Některé věnečky jsou špatné: krém je sražený, chutná „chemicky“ nebo je těsto tvrdé.
+Jeden věneček je nejlepší: má dobrý krém i dobré těsto.
+
+V tabulce je napsáno, kolik věneček stál a jaké dostal známky (jako ve škole).
+"""
+
+LMP_VENECKY_TEXT = """VĚNEČKY (LMP/SPU)
+
+V textu se porovnávají věnečky z cukráren.
+Některé jsou špatné (divná chuť, tvrdé těsto).
+Jeden je nejlepší.
+Tabulka ukazuje cenu a známku.
+"""
+
+
+# ---------------------------
+# Dramatizace (úvodní)
+# ---------------------------
+
+DRAMA = {
+    "karetni": [
+        "Žák A: „Já tomu nerozumím… kdo koho přebíjí?“",
+        "Žák B: „Tak si to zkusíme! Já jsem myš a ty jsi slon.“",
+        "Učitel/ka: „Stop — podle pravidel může někdy myš přebít slona. Zkusíme přijít na to proč.“",
+        "Učitel/ka: „Dnes budeme číst návod a zjistíme, jak to ve hře funguje.“",
+    ],
+    "sladke": [
+        "Žák A: „Kdyby existovala čokoláda bez kalorií, jedl/a bych ji pořád!“",
+        "Žák B: „A šla by vůbec udělat? Aby byla sladká a chutnala normálně?“",
+        "Učitel/ka: „Dnes budeme číst text, kde vědci hledají takové sladidlo.“",
+    ],
+    "venecky": [
+        "Žák A: „Tahle cukrárna je nejlepší, to je jasné!“",
+        "Žák B: „Ne! Já myslím, že rozhoduje chuť a suroviny.“",
+        "Učitel/ka: „Dnes budeme číst hodnocení zákusků a budeme hledat, co je fakt a co je názor.“",
+    ],
+}
+
+
+# ---------------------------
+# Karetní hra – tabulka „Kdo přebije koho?“ (přesná logika dle obrázku)
+# ---------------------------
+
+KARETNI_ANIMALS = ["Kosatka", "Slon", "Krokodýl", "Lední medvěd", "Lev", "Tuleň", "Liška", "Okoun", "Ježek", "Sardinky", "Myš", "Komár"]
+KARETNI_ROWS = ["Kosatku", "Slona", "Krokodýla", "Ledního medvěda", "Lva", "Tuleně", "Lišku", "Okouna", "Ježka", "Sardinky", "Myš", "Komára"]
+
+# Šedé buňky (řádek -> které sloupce jsou vybarvené)
+KARETNI_BEATERS = {
+    "Kosatku": [],
+    "Slona": ["Myš"],
+    "Krokodýla": ["Slon"],
+    "Ledního medvěda": ["Kosatka", "Slon"],
+    "Lva": ["Slon"],
+    "Tuleně": ["Kosatka", "Lední medvěd"],
+    "Lišku": ["Slon", "Krokodýl", "Lední medvěd", "Lev"],
+    "Okouna": ["Kosatka", "Krokodýl", "Lední medvěd", "Tuleň"],
+    "Ježka": ["Liška"],
+    "Sardinky": ["Kosatka", "Krokodýl", "Tuleň", "Okoun"],
+    "Myš": ["Krokodýl", "Lední medvěd", "Lev", "Tuleň", "Liška", "Ježek"],
+    "Komára": ["Ježek", "Sardinky", "Myš"],
+}
+
+def add_karetni_matrix_table(doc: Document):
+    add_section_header(doc, "Kdo přebije koho? (tabulka z pravidel hry)")
+    # +1 sloupec na názvy řádků
+    table = doc.add_table(rows=1, cols=1 + len(KARETNI_ANIMALS))
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    # Hlavička
+    hdr = table.rows[0].cells
+    hdr[0].text = ""  # levý horní roh
+    for i, animal in enumerate(KARETNI_ANIMALS, start=1):
+        hdr[i].text = animal
+
+    # Řádky
+    for row_name in KARETNI_ROWS:
+        row_cells = table.add_row().cells
+        row_cells[0].text = row_name
+        for i, col_animal in enumerate(KARETNI_ANIMALS, start=1):
+            # diagonála: >
+            if row_name.lower().startswith(col_animal.lower()[:3].lower()):
+                row_cells[i].text = ">"
+            else:
+                row_cells[i].text = ""
+
+            # šedé vybarvení podle mapy
+            if col_animal in KARETNI_BEATERS.get(row_name, []):
+                set_cell_shading(row_cells[i], "D9D9D9")
+
+    # rámečky
+    for r in table.rows:
+        for c in r.cells:
+            set_cell_border(
+                c,
+                top={"sz": 8, "val": "single", "color": "000000"},
+                bottom={"sz": 8, "val": "single", "color": "000000"},
+                left={"sz": 8, "val": "single", "color": "000000"},
+                right={"sz": 8, "val": "single", "color": "000000"},
+            )
+
+    doc.add_paragraph("Živočichové označení šedým políčkem daný druh přebíjejí. Symbol > znamená: lze přebít více kartami stejného druhu.")
+
+
+# ---------------------------
+# Karetní hra – pyramidový sloupec + kartičky (emoji)
+# ---------------------------
+
+ANIMAL_CARDS = [
+    ("komár", "🦟"),
+    ("myš", "🐭"),
+    ("sardinka", "🐟"),
+    ("ježek", "🦔"),
+    ("okoun", "🐟"),
+    ("liška", "🦊"),
+    ("tuleň", "🦭"),
+    ("lev", "🦁"),
+    ("lední medvěd", "🐻‍❄️"),
+    ("krokodýl", "🐊"),
+    ("slon", "🐘"),
+    ("kosatka", "🐬"),
+    ("chameleon (žolík)", "🦎"),
 ]
 
-VENECKY_GLOSSARY = {
-    "sražený": "když krém není hladký a je „hrudkovitý“.",
-    "pachuť": "nepříjemná chuť, která zůstává v puse.",
-    "korpus": "těsto, základ zákusku.",
-    "drážky": "linky na těstě, které jsou vidět po zdobení.",
-    "zakrývá": "schovává, aby to nebylo poznat.",
-    "přepečený": "upečený moc – je tvrdý nebo suchý.",
-    "vláčný": "měkký a příjemný na kousnutí.",
-    "křupavý": "když to při kousnutí křupne.",
+# Pořadí v „pyramidě/sloupci“ — VRCH = nejsilnější, SPOD = nejslabší
+PYRAMID_ORDER_TOP_TO_BOTTOM = [
+    "kosatka",
+    "slon",
+    "krokodýl",
+    "lední medvěd",
+    "lev",
+    "tuleň",
+    "liška",
+    "okoun",
+    "ježek",
+    "sardinka",
+    "myš",
+    "komár",
+    "chameleon (žolík)",
+]
+
+def add_pyramid_column(doc: Document):
+    add_section_header(doc, "Zvířecí „pyramida“ síly (lepení)")
+    doc.add_paragraph("Vystřihni kartičky a nalep je do okýnek. Nahoře bude nejsilnější zvíře, dole nejslabší.")
+
+    # Sloupec okýnek – velikost tak, aby se vešly kartičky (rychlé na 1 stranu)
+    t = doc.add_table(rows=len(PYRAMID_ORDER_TOP_TO_BOTTOM)+1, cols=1)
+    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    # Hlavička
+    t.cell(0, 0).text = "NAHOŘE = NEJSILNĚJŠÍ"
+    t.cell(0, 0).paragraphs[0].runs[0].bold = True
+    t.cell(0, 0).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Okýnka
+    for i, _ in enumerate(PYRAMID_ORDER_TOP_TO_BOTTOM, start=1):
+        cell = t.cell(i, 0)
+        cell.text = ""  # prázdné pro lepení
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        # výška okýnka
+        cell.height = Cm(1.2)
+        set_cell_border(
+            cell,
+            top={"sz": 12, "val": "single", "color": "000000"},
+            bottom={"sz": 12, "val": "single", "color": "000000"},
+            left={"sz": 12, "val": "single", "color": "000000"},
+            right={"sz": 12, "val": "single", "color": "000000"},
+        )
+
+    doc.add_paragraph("DOLE = NEJSLABŠÍ")
+
+
+def add_animal_cards_3cols(doc: Document):
+    add_section_header(doc, "Kartičky zvířat (na stříhání)")
+    doc.add_paragraph("Vystřihni kartičky. (3 sloupce)")
+
+    cols = 3
+    rows = (len(ANIMAL_CARDS) + cols - 1) // cols
+    table = doc.add_table(rows=rows, cols=cols)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    idx = 0
+    for r in range(rows):
+        for c in range(cols):
+            cell = table.cell(r, c)
+            set_cell_border(
+                cell,
+                top={"sz": 12, "val": "single", "color": "000000"},
+                bottom={"sz": 12, "val": "single", "color": "000000"},
+                left={"sz": 12, "val": "single", "color": "000000"},
+                right={"sz": 12, "val": "single", "color": "000000"},
+            )
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+
+            if idx < len(ANIMAL_CARDS):
+                name, emoji = ANIMAL_CARDS[idx]
+                p = cell.paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run1 = p.add_run(f"{emoji}\n")
+                run1.font.size = Pt(26)
+                run2 = p.add_run(name)
+                run2.font.size = Pt(12)
+                run2.bold = True
+            else:
+                cell.text = ""
+            idx += 1
+
+
+# ---------------------------
+# Tabulky pro Sladké mámení a Věnečky
+# ---------------------------
+
+def add_two_col_table(doc: Document, title: str, rows):
+    add_section_header(doc, title)
+    t = doc.add_table(rows=1, cols=2)
+    t.alignment = WD_TABLE_ALIGNMENT.LEFT
+    hdr = t.rows[0].cells
+    hdr[0].text = "Položka"
+    hdr[1].text = "Hodnota (%)"
+
+    for a, b in rows:
+        rr = t.add_row().cells
+        rr[0].text = a
+        rr[1].text = b
+
+    for r in t.rows:
+        for c in r.cells:
+            set_cell_border(
+                c,
+                top={"sz": 8, "val": "single", "color": "000000"},
+                bottom={"sz": 8, "val": "single", "color": "000000"},
+                left={"sz": 8, "val": "single", "color": "000000"},
+                right={"sz": 8, "val": "single", "color": "000000"},
+            )
+
+def add_venecky_table_and_podniky(doc: Document):
+    add_section_header(doc, "Kde jsme věnečky pořídili")
+    for num, txt in VENECKY_PODNIKY:
+        doc.add_paragraph(f"{num}. {txt}")
+
+    add_section_header(doc, "Hodnocení (tabulka)")
+    cols = ["Cukrárna", "Cena v Kč", "Vzhled", "Korpus", "Náplň", "Suroviny", "Celková známka (jako ve škole)"]
+    t = doc.add_table(rows=1, cols=len(cols))
+    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+    for i, c in enumerate(cols):
+        t.cell(0, i).text = c
+
+    for row in VENECKY_TABLE:
+        rr = t.add_row().cells
+        for i, val in enumerate(row):
+            rr[i].text = val
+
+    for r in t.rows:
+        for c in r.cells:
+            set_cell_border(
+                c,
+                top={"sz": 8, "val": "single", "color": "000000"},
+                bottom={"sz": 8, "val": "single", "color": "000000"},
+                left={"sz": 8, "val": "single", "color": "000000"},
+                right={"sz": 8, "val": "single", "color": "000000"},
+            )
+
+
+# ---------------------------
+# Slovníček – výběr + vysvětlení (většina slov vysvětlena)
+# ---------------------------
+
+STOPWORDS = set("""
+a i o u v ve na do z ze že který která které kteří se si je jsou být bylo byla byly jsem jsme jste
+když protože proto ale nebo ani jen ještě už pak také tak tedy tento tato toto
+""".split())
+
+# Slovník vysvětlení (záměrně bohatý pro 3 texty)
+EXPLAIN = {
+    # obecné
+    "maximálně": "nejvíc (největší možné množství)",
+    "vykřikuje": "říká nahlas",
+    "sousto": "kousek jídla v puse",
+    "sousty": "kousky jídla",
+    "vyšlehaný": "hodně našlehaný, nadýchaný",
+    "margarín": "tuk podobný máslu",
+    "vzdáleně": "ani trochu",
+    "nepřipomíná": "není to podobné",
+    "chemická": "umělá, nepřirozená",
+    "chemickou": "umělou, ne přírodní",
+    "pachuť": "nepříjemná chuť, která zůstane",
+    "korpus": "těsto (spodní část zákusku)",
+    "receptura": "správný postup a poměr surovin",
+    "dodrželi": "udělali přesně podle pravidel",
+    "nadlehčený": "udělaný lehčí a nadýchanější",
+    "poměr": "kolik čeho má být",
+    "tragédie": "velmi velký problém (tady: přehnaně řečeno)",
+    "vlačný": "měkký a šťavnatý",
+    "křupavý": "když to při kousnutí křupne",
+    "přepečený": "pečený moc dlouho",
+    "ztvrdlý": "tvrdý",
+    "zestárlá": "už není čerstvá",
+    "na vrácení": "tak špatné, že by to neměli prodávat",
+    "absence": "chybění (něčeho tam není)",
+    "prodávat": "dávat do obchodu za peníze",
+    "nesoutěžní": "mimo soutěž / mimo hodnocení",
+    "doplňkové": "navíc, přidané",
+    "podnikům": "firmám / provozovnám (tady: cukrárnám)",
+    "napravit": "zlepšit, opravit",
+    "dojem": "pocit",
+    "verdikt": "konečné rozhodnutí",
+    "průmyslově": "vyrobené ve velké výrobě (továrně)",
+    "nelistuje": "netvoří vrstvy jako listové těsto",
+    "upraveno": "trochu změněno",
+    # Karetní
+    "rovnoměrně": "stejně pro všechny",
+    "kombinaci": "spojení více karet dohromady",
+    "přebít": "dát silnější kartu (porazit předchozí)",
+    "vynést": "položit kartu na stůl",
+    "lícem": "přední stranou",
+    "žolík": "karta, která může nahradit jinou",
+    "obdobnou": "podobnou",
+    "požadovaný": "takový, jaký je potřeba",
+    "samostatně": "sám, bez jiné karty",
+    # Sladké mámení
+    "epidemie": "rychlé rozšíření problému",
+    "obezita": "velká nadváha",
+    "metabolismus": "látková výměna v těle",
+    "poptávka": "zájem lidí o něco (co chtějí kupovat)",
+    "nízkokalorický": "s málo kaloriemi (méně energie)",
+    "energetický": "související s energií (kaloriemi)",
+    "alchymisté": "lidé, kteří hledali zázračný recept (tady: přirovnání)",
+    "náhražka": "něco místo původní věci",
+    "sladivost": "jak moc je něco sladké",
+    "kalorie": "jednotka energie v jídle",
+    "polysacharidy": "složitější cukry",
+    "glukóza": "hroznový cukr",
+    "fruktóza": "ovocný cukr",
+    "laskominy": "dobroty",
+    "kardiovaskulární": "týkající se srdce a cév",
+    "ztužené": "uměle upravené tuky",
 }
 
-VENECKY_PACK = TextPack(
-    key="venecky",
-    title="Věnečky",
-    grade=4,
-    points_max=12,
-    full_text=VENECKY_FULL_TEXT,
-    simplified_text=VENECKY_SIMPLIFIED_TEXT,
-    lmp_text=VENECKY_LMP_TEXT,
-    dramatization=VENECKY_DRAMA,
-    questions=VENECKY_QUESTIONS,
-    glossary_map=VENECKY_GLOSSARY,
-    tables_spec={"TAB_V": VENECKY_TABLE_ROWS},
-)
+def pick_glossary_words(text: str, max_words=12):
+    words = re.findall(r"[A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž\-]+", text)
+    cleaned = []
+    for w in words:
+        wl = w.lower().strip("-")
+        if len(wl) < 6:
+            continue
+        if wl in STOPWORDS:
+            continue
+        if wl.isdigit():
+            continue
+        # vyhoď velmi časté věci typu „věneček“ atd. necháme, ale až později
+        cleaned.append(wl)
 
+    uniq = []
+    for w in cleaned:
+        if w not in uniq:
+            uniq.append(w)
 
-PACKS: Dict[str, TextPack] = {
-    "Karetní hra (3. třída)": KARETNI_PACK,
-    "Věnečky (4. třída)": VENECKY_PACK,
-    "Sladké mámení (5. třída)": SLADKE_PACK,
-}
+    # preferuj slova, která umíme vysvětlit (aby byl slovníček opravdu slovníček)
+    known = [w for w in uniq if w in EXPLAIN]
+    unknown = [w for w in uniq if w not in EXPLAIN]
 
+    out = []
+    for w in known:
+        out.append(w)
+        if len(out) >= max_words:
+            break
+    if len(out) < max_words:
+        for w in unknown:
+            out.append(w)
+            if len(out) >= max_words:
+                break
 
-# -----------------------------------
-# Vkládání tabulek do textu (MARKERY)
-# -----------------------------------
-def add_text_with_tables(doc: Document, raw_text: str, tables_spec: Optional[Dict[str, List[List[str]]]]):
-    if not tables_spec:
-        for line in raw_text.split("\n"):
-            if line.strip():
-                doc.add_paragraph(line)
-        return
+    return out[:max_words]
 
-    pattern = r"\{\{([A-Z0-9_]+)\}\}"
-    parts = re.split(pattern, raw_text)
+def add_glossary_at_end(doc: Document, source_text: str, max_words=12):
+    add_hr(doc)
+    add_section_header(doc, "Slovníček (na konec pracovního listu)")
+    words = pick_glossary_words(source_text, max_words=max_words)
 
-    i = 0
-    while i < len(parts):
-        chunk = parts[i]
-        if chunk.strip():
-            for line in chunk.split("\n"):
-                if line.strip():
-                    doc.add_paragraph(line)
-        if i + 1 < len(parts):
-            marker = parts[i + 1]
-            if marker in tables_spec:
-                rows = tables_spec[marker]
-                if len(rows[0]) == 2:
-                    make_table(doc, rows, col_widths_cm=[12.0, 3.0], header_bold=False)
-                else:
-                    make_table(doc, rows, col_widths_cm=[2.0, 2.2, 1.5, 1.5, 1.5, 1.8, 3.8], header_bold=True)
-                doc.add_paragraph("")
-            i += 2
+    for w in words:
+        line = doc.add_paragraph()
+        r1 = line.add_run(f"• {w} = ")
+        r1.bold = True
+
+        if w in EXPLAIN:
+            r2 = line.add_run(EXPLAIN[w])
         else:
-            i += 1
+            # žádná věta – jen linka
+            line.add_run("______________________________")
+
+        # prostor na poznámky žáka
+        doc.add_paragraph("Poznámka žáka/žákyně: _______________________________")
 
 
-# -----------------------------------
-# Generátor pracovních listů
-# -----------------------------------
-def build_workbook(pack: TextPack, version: str) -> Document:
+# ---------------------------
+# Otázky A/B/C (stabilní, bez chyb typu „Věneček č.“)
+# ---------------------------
+
+def add_questions_karetni(doc: Document):
+    add_section_header(doc, "Otázky A/B/C")
+    doc.add_paragraph("A) Porozumění (najdi v textu)")
+    doc.add_paragraph("1) Co je cílem hry? Napiš jednou větou.")
+    add_lines(doc, 1)
+
+    doc.add_paragraph("2) Co znamená ve hře slovo „pass“?")
+    add_lines(doc, 1)
+
+    doc.add_paragraph("B) Přemýšlení (vysvětli)")
+    doc.add_paragraph("3) Proč se chameleon (žolík) nesmí hrát samostatně?")
+    add_lines(doc, 2)
+
+    doc.add_paragraph("C) Můj názor")
+    doc.add_paragraph("4) Co bys poradil/a spolužákovi, aby ve hře vyhrál? (1–2 věty)")
+    add_lines(doc, 2)
+
+def add_questions_sladke(doc: Document):
+    add_section_header(doc, "Otázky A/B/C")
+    doc.add_paragraph("A) Porozumění (najdi v textu)")
+    doc.add_paragraph("1) Proč roste ve světě poptávka po nízkokalorických sladkostech?")
+    add_lines(doc, 2)
+
+    doc.add_paragraph("2) Najdi v textu dvě vlastnosti ideálního sladidla.")
+    add_lines(doc, 2)
+
+    doc.add_paragraph("B) Práce s daty / interpretace")
+    doc.add_paragraph("3) Podle tabulek: Kterou bonboniéru koupilo více lidí – Tofifee nebo Merci? Napiš i procenta.")
+    add_lines(doc, 2)
+
+    doc.add_paragraph("C) Kritické čtení / můj názor")
+    doc.add_paragraph("4) Myslíš, že lidé v ČR opravdu nechtějí číst informace o kaloriích? Proč ano/ne?")
+    add_lines(doc, 2)
+
+def add_questions_venecky(doc: Document):
+    add_section_header(doc, "Otázky A/B/C")
+    doc.add_paragraph("A) Porozumění (najdi v textu)")
+    doc.add_paragraph("1) Který věneček neobsahuje pudink uvařený z mléka? Napiš číslo věnečku a proč.")
+    add_lines(doc, 2)
+
+    doc.add_paragraph("2) Ve kterém věnečku je vůně rumu použita k zakrytí chybějících chutí? (číslo věnečku)")
+    add_lines(doc, 1)
+
+    doc.add_paragraph("B) Práce s tabulkou / interpretace")
+    doc.add_paragraph("3) Který podnik dopadl nejlépe? (podle tabulky) Napiš název.")
+    add_lines(doc, 1)
+
+    doc.add_paragraph("4) Který věneček byl nejdražší? Uveď cenu a kde byl koupen (podnik).")
+    add_lines(doc, 2)
+
+    doc.add_paragraph("C) Kritické čtení / můj názor")
+    doc.add_paragraph("5) Souhlasíš s hodnocením? Vyber jeden věneček a vysvětli proč.")
+    add_lines(doc, 2)
+
+
+# ---------------------------
+# Vytvoření pracovních listů – vždy obsahuje odpovídající text
+# ---------------------------
+
+def add_dramatization(doc: Document, key: str):
+    add_section_header(doc, "Dramatizace (zahájení hodiny – krátká scénka)")
+    for line in DRAMA[key]:
+        doc.add_paragraph(line)
+
+def build_doc_karetni(version: str) -> Document:
     doc = Document()
-    set_doc_defaults(doc, base_font_size=11)
+    set_doc_style(doc)
 
-    title_map = {
-        "full": f"EdRead AI – PRACOVNÍ LIST (PLNÝ) – {pack.title}",
-        "simplified": f"EdRead AI – PRACOVNÍ LIST (ZJEDNODUŠENÝ) – {pack.title}",
-        "lmp": f"EdRead AI – PRACOVNÍ LIST (LMP/SPU) – {pack.title}",
-    }
-    add_title(doc, title_map[version], f"Ročník: {pack.grade}. třída | Max.: {pack.points_max} bodů")
-    add_name_line(doc)
+    add_title(doc, "EdRead AI – Pracovní list", f"Karetní hra (3. třída) — verze: {version}")
+    add_hr(doc)
+    add_dramatization(doc, "karetni")
+    add_hr(doc)
 
-    # 1) Dramatizace
-    add_section_header(doc, "1) ÚVODNÍ DRAMATIZACE (motivace – začátek hodiny)")
-    add_bullets(doc, pack.dramatization)
+    add_section_header(doc, "Text k přečtení")
+    if version == "PLNÝ":
+        doc.add_paragraph(FULL_KARETNI_TEXT)
+        # tabulka uvnitř textu (po části o pořadí karet)
+        add_karetni_matrix_table(doc)
+    elif version == "ZJEDNODUŠENÝ":
+        doc.add_paragraph(SIMPLE_KARETNI_TEXT)
+    else:  # LMP
+        doc.add_paragraph(LMP_KARETNI_TEXT)
 
-    # 2) Text pro žáky
-    add_section_header(doc, "2) TEXT PRO ŽÁKY (čti pozorně)")
-    if version == "full":
-        add_text_with_tables(doc, pack.full_text, pack.tables_spec)
-    elif version == "simplified":
-        add_text_with_tables(doc, pack.simplified_text, pack.tables_spec)
+    add_hr(doc)
+
+    # Aktivita pyramida jen pro 3. třídu (u všech verzí, ale s textem podle verze)
+    add_pyramid_column(doc)
+    add_animal_cards_3cols(doc)
+
+    add_hr(doc)
+    add_questions_karetni(doc)
+
+    # Slovníček až na konec
+    src = FULL_KARETNI_TEXT if version == "PLNÝ" else (SIMPLE_KARETNI_TEXT if version == "ZJEDNODUŠENÝ" else LMP_KARETNI_TEXT)
+    add_glossary_at_end(doc, src, max_words=12)
+
+    return doc
+
+def build_doc_sladke(version: str) -> Document:
+    doc = Document()
+    set_doc_style(doc)
+
+    add_title(doc, "EdRead AI – Pracovní list", f"Sladké mámení (5. třída) — verze: {version}")
+    add_hr(doc)
+    add_dramatization(doc, "sladke")
+    add_hr(doc)
+
+    add_section_header(doc, "Text k přečtení")
+    if version == "PLNÝ":
+        doc.add_paragraph(FULL_SLADKE_TEXT)
+        # tabulky VLOŽENÉ „uvnitř textu“ — hned po úvodu Češi a čokoláda
+        add_section_header(doc, "Češi a čokoláda (tabulky – přesný přepis)")
+        for title, rows in SLADKE_TABLES.items():
+            add_two_col_table(doc, title, rows)
+    elif version == "ZJEDNODUŠENÝ":
+        doc.add_paragraph(SIMPLE_SLADKE_TEXT)
     else:
-        add_text_with_tables(doc, pack.lmp_text, pack.tables_spec)
+        doc.add_paragraph(LMP_SLADKE_TEXT)
 
-    # Karetní – vizuální opora + sloupec síly + kartičky
-    if pack.key == "karetni":
-        add_section_header(doc, "3) OBRÁZKOVÁ OPORA K PRAVIDLŮM HRY")
-        add_karetni_strength_matrix(doc)
-        doc.add_paragraph("")
-        add_strength_column_template(doc)
-        doc.add_paragraph("")
-        add_animal_cards_3cols(doc)
-        q_section_no = 4
+    add_hr(doc)
+    add_questions_sladke(doc)
+
+    src = FULL_SLADKE_TEXT if version == "PLNÝ" else (SIMPLE_SLADKE_TEXT if version == "ZJEDNODUŠENÝ" else LMP_SLADKE_TEXT)
+    add_glossary_at_end(doc, src, max_words=12)
+    return doc
+
+def build_doc_venecky(version: str) -> Document:
+    doc = Document()
+    set_doc_style(doc)
+
+    add_title(doc, "EdRead AI – Pracovní list", f"Věnečky (4. třída) — verze: {version}")
+    add_hr(doc)
+    add_dramatization(doc, "venecky")
+    add_hr(doc)
+
+    add_section_header(doc, "Text k přečtení")
+    if version == "PLNÝ":
+        doc.add_paragraph(FULL_VENECKY_TEXT)
+        # podniky + tabulka přímo uvnitř (jako originál)
+        add_venecky_table_and_podniky(doc)
+    elif version == "ZJEDNODUŠENÝ":
+        doc.add_paragraph(SIMPLE_VENECKY_TEXT)
+        add_venecky_table_and_podniky(doc)  # tabulka zůstává (pracují s ní i v jednodušší verzi)
     else:
-        q_section_no = 3
+        doc.add_paragraph(LMP_VENECKY_TEXT)
+        add_venecky_table_and_podniky(doc)  # tabulka zůstává
 
-    # Otázky
-    add_section_header(doc, f"{q_section_no}) OTÁZKY (A = vyhledej, B = vysvětli, C = názor)")
-    for q in pack.questions:
-        doc.add_paragraph(q)
-        add_lines_for_answer(doc, lines=1)
-        doc.add_paragraph("")
+    add_hr(doc)
+    add_questions_venecky(doc)
 
-    # Slovníček až na konci
-    text_for_vocab = pack.full_text if version == "full" else pack.simplified_text if version == "simplified" else pack.lmp_text
-    words = extract_candidate_words(text_for_vocab, max_words=12)
-    add_glossary_section(doc, words, pack.glossary_map)
+    src = FULL_VENECKY_TEXT if version == "PLNÝ" else (SIMPLE_VENECKY_TEXT if version == "ZJEDNODUŠENÝ" else LMP_VENECKY_TEXT)
+    add_glossary_at_end(doc, src, max_words=12)
+    return doc
+
+
+# ---------------------------
+# Metodický list – manuál + rozdíly mezi verzemi
+# ---------------------------
+
+def build_methodology(text_name: str, grade: str) -> Document:
+    doc = Document()
+    set_doc_style(doc)
+
+    add_title(doc, "EdRead AI – Metodický list pro učitele", f"{text_name} ({grade})")
+    add_hr(doc)
+
+    add_section_header(doc, "Doporučený postup práce (45 minut)")
+    doc.add_paragraph("1) Dramatizace (startovací scénka) – 3 až 7 minut.")
+    doc.add_paragraph("2) Slovníček (i když je na konci pracovního listu) – učitel žáky nejprve k slovníčku NAVIGUJE, společně projdou významy.")
+    doc.add_paragraph("3) Čtení textu – žáci se vrátí do textu, čtou (samostatně / po odstavcích), podtrhují klíčové informace.")
+    doc.add_paragraph("4) Otázky A/B/C – nejprve A (vyhledání), potom B (interpretace), nakonec C (vlastní názor).")
+    doc.add_paragraph("5) Krátké shrnutí – co nám text řekl? Co je fakt a co je názor?")
+
+    add_hr(doc)
+    add_section_header(doc, "Rozdíly mezi verzemi pracovních listů (učitel se snadno rozhodne)")
+    doc.add_paragraph("PLNÝ list:")
+    doc.add_paragraph("• obsahuje původní (plný) text + všechny tabulky v původní podobě; otázky jsou stejné, slovníček je na konci.")
+    doc.add_paragraph("ZJEDNODUŠENÝ list:")
+    doc.add_paragraph("• obsahuje kratší a jednodušší text; ponechává klíčová fakta; tabulky zůstávají, pokud jsou pro otázky potřeba.")
+    doc.add_paragraph("LMP/SPU list:")
+    doc.add_paragraph("• velmi jednoduché věty, jasná struktura; vhodné pro žáky se SVP; tabulky zůstávají (pracuje se s nimi i v testu).")
+
+    add_hr(doc)
+    add_section_header(doc, "Poznámka k testování (pro kvaziexperiment)")
+    doc.add_paragraph("Doporučení: zachovat stejné podmínky pro všechny žáky (čas, instrukce, prostředí).")
+    doc.add_paragraph("Učitel volí verzi listu podle potřeb žáka (PLNÝ / ZJEDNODUŠENÝ / LMP-SPU).")
 
     return doc
 
 
-# -----------------------------------
-# Metodický list pro učitele (zvlášť)
-# -----------------------------------
-def build_methodology(pack: TextPack) -> Document:
-    doc = Document()
-    set_doc_defaults(doc, base_font_size=11)
+# ---------------------------
+# Streamlit UI
+# ---------------------------
 
-    add_title(doc, f"EdRead AI – METODICKÝ LIST PRO UČITELE – {pack.title}", f"Ročník: {pack.grade}. třída")
-    doc.add_paragraph("Tento metodický list slouží jako manuál pro učitele, který bude realizovat ověření materiálů ve třídě.")
-    doc.add_paragraph("")
+st.set_page_config(page_title="EdRead AI (prototyp)", layout="centered")
+st.title("EdRead AI – generátor materiálů (prototyp pro DP)")
 
-    add_section_header(doc, "1) Cíl didaktického zásahu")
-    add_bullets(doc, [
-        "Podpora čtenářské gramotnosti prostřednictvím strukturované práce s textem.",
-        "Rozvoj porozumění, práce s informacemi, interpretace a formulace názoru (A/B/C).",
-        "Vizuální opory jsou součástí materiálu (učitel nemusí nic dohledávat)."
-    ])
+st.write("Vyber text a stáhni pracovní listy (plný / zjednodušený / LMP) + metodický list.")
 
-    add_section_header(doc, "2) Návaznost na RVP ZV (jazyk a jazyková komunikace)")
-    doc.add_paragraph(
-        "Materiály vedou žáka k vyhledávání informací, porozumění textu, interpretaci a formulaci odpovědi. "
-        "Úlohy A/B/C podporují postup od práce s explicitní informací přes výklad až po vlastní stanovisko."
+choice = st.selectbox(
+    "Vyber text:",
+    ["Karetní hra (3. třída)", "Věnečky (4. třída)", "Sladké mámení (5. třída)"]
+)
+
+generate = st.button("Vygenerovat dokumenty")
+
+if generate:
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+
+    if choice.startswith("Karetní"):
+        text_key = "karetni"
+        full_doc = build_doc_karetni("PLNÝ")
+        simple_doc = build_doc_karetni("ZJEDNODUŠENÝ")
+        lmp_doc = build_doc_karetni("LMP/SPU")
+        metod = build_methodology("Karetní hra", "3. třída")
+
+        full_name = f"pracovni_list_Karetni_hra_plny_{stamp}.docx"
+        sim_name = f"pracovni_list_Karetni_hra_zjednoduseny_{stamp}.docx"
+        lmp_name = f"pracovni_list_Karetni_hra_LMP_{stamp}.docx"
+        met_name = f"metodicky_list_Karetni_hra_{stamp}.docx"
+
+    elif choice.startswith("Věnečky"):
+        text_key = "venecky"
+        full_doc = build_doc_venecky("PLNÝ")
+        simple_doc = build_doc_venecky("ZJEDNODUŠENÝ")
+        lmp_doc = build_doc_venecky("LMP/SPU")
+        metod = build_methodology("Věnečky", "4. třída")
+
+        full_name = f"pracovni_list_Venecky_plny_{stamp}.docx"
+        sim_name = f"pracovni_list_Venecky_zjednoduseny_{stamp}.docx"
+        lmp_name = f"pracovni_list_Venecky_LMP_{stamp}.docx"
+        met_name = f"metodicky_list_Venecky_{stamp}.docx"
+
+    else:
+        text_key = "sladke"
+        full_doc = build_doc_sladke("PLNÝ")
+        simple_doc = build_doc_sladke("ZJEDNODUŠENÝ")
+        lmp_doc = build_doc_sladke("LMP/SPU")
+        metod = build_methodology("Sladké mámení", "5. třída")
+
+        full_name = f"pracovni_list_Sladke_mameni_plny_{stamp}.docx"
+        sim_name = f"pracovni_list_Sladke_mameni_zjednoduseny_{stamp}.docx"
+        lmp_name = f"pracovni_list_Sladke_mameni_LMP_{stamp}.docx"
+        met_name = f"metodicky_list_Sladke_mameni_{stamp}.docx"
+
+    # Uložení do bytes pro download (bez mizícího tlačítka – každý má vlastní klíč)
+    import io
+    def doc_to_bytes(doc):
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        return buf
+
+    st.success("Hotovo. Stáhni dokumenty níže:")
+
+    st.download_button(
+        "⬇️ Stáhnout PLNOUPRAVNÝ pracovní list (DOCX)",
+        data=doc_to_bytes(full_doc),
+        file_name=full_name,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        key=f"dl_full_{stamp}"
     )
 
-    add_section_header(doc, "3) Výstupy EdRead AI (DOCX)")
-    add_bullets(doc, [
-        "Pracovní list – PLNÝ: plný text + tabulky v místě textu + otázky + slovníček na konci.",
-        "Pracovní list – ZJEDNODUŠENÝ: zjednodušený text + tabulky + stejné typy úloh.",
-        "Pracovní list – LMP/SPU: nejvyšší míra struktury a srozumitelnosti, kratší bloky textu.",
-        "Metodický list: jasný postup hodiny + přehled rozdílů mezi verzemi."
-    ])
+    st.download_button(
+        "⬇️ Stáhnout ZJEDNODUŠENÝ pracovní list (DOCX)",
+        data=doc_to_bytes(simple_doc),
+        file_name=sim_name,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        key=f"dl_simple_{stamp}"
+    )
 
-    add_section_header(doc, "4) Rozdíly mezi verzemi (pro rychlý výběr učitele)")
-    if pack.key == "karetni":
-        add_bullets(doc, [
-            "PLNÝ: kompletní pravidla hry (více informací, delší text).",
-            "ZJEDNODUŠENÝ: kratší a přímější formulace pravidel, méně zátěže najednou.",
-            "LMP/SPU: text rozdělen do kroků, odrážky, zjednodušené věty.",
-            "Vizuální opory: matice síly + sloupec síly (šablona) + kartičky (ve všech verzích)."
-        ])
-    else:
-        add_bullets(doc, [
-            "PLNÝ: širší významový rozsah textu, plnější formulace.",
-            "ZJEDNODUŠENÝ: kratší a srozumitelnější verze při zachování hlavních sdělení.",
-            "LMP/SPU: nejvyšší struktura – krátké úseky, odrážky, orientační body.",
-            "Slovníček je fyzicky na konci pracovního listu (neruší čtení)."
-        ])
+    st.download_button(
+        "⬇️ Stáhnout LMP/SPU pracovní list (DOCX)",
+        data=doc_to_bytes(lmp_doc),
+        file_name=lmp_name,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        key=f"dl_lmp_{stamp}"
+    )
 
-    add_section_header(doc, "5) Doporučený průběh hodiny (DŮLEŽITÉ – pořadí práce)")
-    add_bullets(doc, [
-        "1) Dramatizace (5–7 min): krátká scénka bez pomůcek.",
-        "2) Slovníček (5–8 min): i když je na konci pracovního listu, učitel žáky záměrně vede nejprve ke slovníčku. "
-        "Žáci si slovníček projdou, případně si doplní poznámky ke slovům.",
-        "3) Čtení textu (10–15 min): teprve po slovníčku se žáci vrátí do textu a čtou s lepším porozuměním.",
-        "4) Otázky (15–20 min): vyplňování úloh A/B/C; učitel sleduje práci s textem a argumentaci.",
-        "5) Krátká reflexe (2–3 min): co bylo nejtěžší, co pomohlo (slovníček, tabulka, vizuální opora)."
-    ])
+    st.download_button(
+        "⬇️ Stáhnout METODICKÝ LIST (DOCX)",
+        data=doc_to_bytes(metod),
+        file_name=met_name,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        key=f"dl_met_{stamp}"
+    )
 
-    add_section_header(doc, "6) Kritéria pro volbu verze (orientačně)")
-    add_bullets(doc, [
-        "PLNÝ: běžná úroveň čtení, žák zvládá delší text.",
-        "ZJEDNODUŠENÝ: žák potřebuje kratší text a jasnější formulace.",
-        "LMP/SPU: žák potřebuje výraznou strukturu, kratší věty, více podpory v orientaci."
-    ])
-
-    return doc
-
-
-# -----------------------------------
-# Streamlit UI
-# -----------------------------------
-st.set_page_config(page_title="EdRead AI (prototyp)", layout="wide")
-st.title("EdRead AI – prototyp pro diplomovou práci")
-st.caption("Generuje pracovní listy (plný / zjednodušený / LMP-SPU) + metodiku. Texty: Karetní hra, Věnečky, Sladké mámení.")
-
-text_choice = st.selectbox("Vyber text:", list(PACKS.keys()))
-pack = PACKS[text_choice]
-
-st.markdown("---")
-st.subheader("Generování výstupů")
-
-if "bytes_full" not in st.session_state:
-    st.session_state.bytes_full = None
-    st.session_state.bytes_simpl = None
-    st.session_state.bytes_lmp = None
-    st.session_state.bytes_meto = None
-
-colA, colB, colC, colD = st.columns(4)
-
-with colA:
-    if st.button("Vygenerovat PLNÝ list", use_container_width=True):
-        doc = build_workbook(pack, "full")
-        st.session_state.bytes_full = doc_to_bytes(doc)
-
-with colB:
-    if st.button("Vygenerovat ZJEDNODUŠENÝ list", use_container_width=True):
-        doc = build_workbook(pack, "simplified")
-        st.session_state.bytes_simpl = doc_to_bytes(doc)
-
-with colC:
-    if st.button("Vygenerovat LMP/SPU list", use_container_width=True):
-        doc = build_workbook(pack, "lmp")
-        st.session_state.bytes_lmp = doc_to_bytes(doc)
-
-with colD:
-    if st.button("Vygenerovat METODIKU", use_container_width=True):
-        doc = build_methodology(pack)
-        st.session_state.bytes_meto = doc_to_bytes(doc)
-
-st.markdown("---")
-st.subheader("Stažení souborů (DOCX)")
-
-d1, d2, d3, d4 = st.columns(4)
-
-with d1:
-    if st.session_state.bytes_full:
-        st.download_button(
-            "Stáhnout PLNÝ list",
-            data=st.session_state.bytes_full,
-            file_name=f"pracovni_list_{pack.title}_plny.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            key="dl_full",
-            use_container_width=True
-        )
-    else:
-        st.info("Nejdřív vygeneruj PLNÝ list.")
-
-with d2:
-    if st.session_state.bytes_simpl:
-        st.download_button(
-            "Stáhnout ZJEDNODUŠENÝ list",
-            data=st.session_state.bytes_simpl,
-            file_name=f"pracovni_list_{pack.title}_zjednoduseny.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            key="dl_simpl",
-            use_container_width=True
-        )
-    else:
-        st.info("Nejdřív vygeneruj zjednodušený list.")
-
-with d3:
-    if st.session_state.bytes_lmp:
-        st.download_button(
-            "Stáhnout LMP/SPU list",
-            data=st.session_state.bytes_lmp,
-            file_name=f"pracovni_list_{pack.title}_LMP_SPU.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            key="dl_lmp",
-            use_container_width=True
-        )
-    else:
-        st.info("Nejdřív vygeneruj LMP/SPU list.")
-
-with d4:
-    if st.session_state.bytes_meto:
-        st.download_button(
-            "Stáhnout METODIKU",
-            data=st.session_state.bytes_meto,
-            file_name=f"metodicky_list_{pack.title}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            key="dl_meto",
-            use_container_width=True
-        )
-    else:
-        st.info("Nejdřív vygeneruj metodiku.")
+st.caption("EdRead AI (prototyp) – generuje materiály pro testování čtenářské gramotnosti. Slovníček je záměrně na konci listu, ale metodika vede učitele k práci se slovníčkem před čtením.")
