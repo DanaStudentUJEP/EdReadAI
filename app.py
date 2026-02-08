@@ -1,8 +1,11 @@
-# app.py — EdRead AI (opravená verze dle posledních připomínek)
-# ✅ ODSTRANĚNA věta z dramatizace: „Nejdřív krátká scénka, pak slovníček...“
-# ✅ PYRAMIDA (sloupec okýnek) = VĚTŠÍ okýnka než kartičky, aby se kartičky vždy vešly
-# ✅ Zůstává: 4 DOCX výstupy (PLNÝ / ZJEDNODUŠENÝ / LMP-SPU / METODIKA)
-# ✅ Zůstává: režim „Vlastní text“ + volba ročníku (1–5)
+# app.py — EdRead AI (finální verze)
+# ✅ Přidán ÚVOD před dramatizací (pro žáky): co se bude dít a proč (krátce, srozumitelně)
+# ✅ V dramatizaci zůstává pouze scénka (bez věty, která patří jen do metodiky)
+# ✅ Pyramidová okýnka zvětšená (kartičky se vejdou)
+# ✅ Tabulky a texty uvnitř pracovního listu (plný/zjednodušený/LMP každý se svým textem)
+# ✅ Slovníček až na konci pracovního listu + prostor na poznámku žáka
+# ✅ Metodika popisuje pořadí: dramatizace → slovníček (na konci) → čtení → otázky
+# ✅ Režim: 3 předpřipravené texty + režim „Vlastní text“ s volbou ročníku 1–5
 
 import re
 from datetime import datetime
@@ -90,7 +93,6 @@ def doc_to_bytes(doc):
     return buf
 
 def compact_paragraph(p):
-    """Zmenší mezery v odstavci (hlavně pro buňky tabulek)."""
     pf = p.paragraph_format
     pf.space_before = Pt(0)
     pf.space_after = Pt(0)
@@ -99,6 +101,29 @@ def compact_paragraph(p):
 def compact_cell(cell):
     for p in cell.paragraphs:
         compact_paragraph(p)
+
+def normalize_spaces(t: str) -> str:
+    t = re.sub(r"\s+\n", "\n", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    return t.strip()
+
+
+# ---------------------------
+# ÚVOD PŘED DRAMATIZACÍ (NOVĚ)
+# ---------------------------
+
+INTRO = {
+    "karetni": "Nejdřív si zahrajeme krátkou scénku z karetní hry. Pomůže nám to pochopit pravidla ještě dřív, než budeme číst text. Potom se k textu vrátíme a dohledáme v něm odpovědi.",
+    "sladke": "Nejdřív si zahrajeme krátkou scénku, která nás naladí na téma. Pak budeme číst text a budeme hledat, jaké informace autor uvádí a co z nich vyplývá.",
+    "venecky": "Nejdřív si zahrajeme krátkou scénku, abychom si ujasnili, co je hodnocení a jak se pozná názor a fakt. Potom si přečteme text a budeme s ním pracovat.",
+    "custom": "Nejdřív si zahrajeme krátkou scénku, která nás uvede do tématu. Potom si přečteme text a budeme v něm hledat důležité informace."
+}
+
+def add_dramatization_intro(doc: Document, key: str):
+    # Krátké úvodní slovo pro žáky
+    add_section_header(doc, "Úvod (co budeme dělat)")
+    doc.add_paragraph(INTRO.get(key, INTRO["custom"]))
 
 
 # ---------------------------
@@ -310,7 +335,7 @@ Tabulka ukazuje cenu a známku.
 
 
 # ---------------------------
-# Dramatizace – OPRAVA: žádná věta o pořadí kroků
+# Dramatizace (scénky)
 # ---------------------------
 
 DRAMA = {
@@ -337,6 +362,11 @@ DRAMA = {
         "Učitel/ka: „Dnes budeme pracovat s textem krok za krokem.“",
     ],
 }
+
+def add_dramatization(doc: Document, key: str):
+    add_section_header(doc, "Dramatizace (zahájení hodiny – krátká scénka)")
+    for line in DRAMA[key]:
+        doc.add_paragraph(line)
 
 
 # ---------------------------
@@ -410,7 +440,6 @@ def add_karetni_matrix_table(doc: Document):
 
 # ---------------------------
 # Karetní hra – kartičky (3 sloupce) + pyramida (větší okýnka)
-# OPRAVA: pyramidová okýnka jsou VĚTŠÍ než kartičky, aby se kartičky vždy vešly.
 # ---------------------------
 
 ANIMAL_CARDS = [
@@ -445,13 +474,11 @@ PYRAMID_ORDER_TOP_TO_BOTTOM = [
     "chameleon (žolík)",
 ]
 
-# Kartička (na stříhání)
-CARD_W_CM = 5.6          # 3 sloupce se vejdou na A4
-CARD_H_CM = 1.85         # kartička
+CARD_W_CM = 5.6
+CARD_H_CM = 1.85
 
-# Okýnko pyramidy (na lepení) — VĚTŠÍ než kartička
-PYR_W_CM = 6.0           # o něco širší
-PYR_H_CM = 2.25          # výrazně vyšší (hlavní důvod, proč se kartičky nevešly)
+PYR_W_CM = 6.0
+PYR_H_CM = 2.25
 
 def add_pyramid_column(doc: Document):
     add_section_header(doc, "Zvířecí „pyramida“ síly (lepení)")
@@ -793,12 +820,6 @@ REPL = {
     "metabolismus": "látková výměna v těle",
 }
 
-def normalize_spaces(t: str) -> str:
-    t = re.sub(r"\s+\n", "\n", t)
-    t = re.sub(r"\n{3,}", "\n\n", t)
-    t = re.sub(r"[ \t]{2,}", " ", t)
-    return t.strip()
-
 def simple_simplify(text: str, grade: int) -> str:
     t = normalize_spaces(text)
     if grade <= 3:
@@ -830,16 +851,13 @@ def lmp_simplify(text: str) -> str:
 # Stavba pracovních listů
 # ---------------------------
 
-def add_dramatization(doc: Document, key: str):
-    add_section_header(doc, "Dramatizace (zahájení hodiny – krátká scénka)")
-    for line in DRAMA[key]:
-        doc.add_paragraph(line)
-
 def build_doc_karetni(version: str) -> Document:
     doc = Document()
     set_doc_style(doc)
 
     add_title(doc, "EdRead AI – Pracovní list", f"Karetní hra (3. třída) — verze: {version}")
+    add_hr(doc)
+    add_dramatization_intro(doc, "karetni")   # ✅ nový úvod
     add_hr(doc)
     add_dramatization(doc, "karetni")
     add_hr(doc)
@@ -872,6 +890,8 @@ def build_doc_sladke(version: str) -> Document:
 
     add_title(doc, "EdRead AI – Pracovní list", f"Sladké mámení (5. třída) — verze: {version}")
     add_hr(doc)
+    add_dramatization_intro(doc, "sladke")    # ✅ nový úvod
+    add_hr(doc)
     add_dramatization(doc, "sladke")
     add_hr(doc)
 
@@ -900,6 +920,8 @@ def build_doc_venecky(version: str) -> Document:
 
     add_title(doc, "EdRead AI – Pracovní list", f"Věnečky (4. třída) — verze: {version}")
     add_hr(doc)
+    add_dramatization_intro(doc, "venecky")   # ✅ nový úvod
+    add_hr(doc)
     add_dramatization(doc, "venecky")
     add_hr(doc)
 
@@ -927,6 +949,8 @@ def build_doc_custom(version: str, title: str, grade: int, full_text: str) -> Do
     set_doc_style(doc)
 
     add_title(doc, "EdRead AI – Pracovní list", f"{title} (třída: {grade}) — verze: {version}")
+    add_hr(doc)
+    add_dramatization_intro(doc, "custom")    # ✅ nový úvod
     add_hr(doc)
     add_dramatization(doc, "custom")
     add_hr(doc)
@@ -964,7 +988,7 @@ def build_methodology(text_name: str, grade: str, has_pyramid: bool = False) -> 
     add_hr(doc)
 
     add_section_header(doc, "Doporučený postup práce (45 minut)")
-    doc.add_paragraph("1) Dramatizace (startovací scénka) – 3 až 7 minut.")
+    doc.add_paragraph("1) Úvodní naladění + dramatizace – 3 až 7 minut (krátká scénka k tématu).")
     doc.add_paragraph("2) Slovníček – i když je na konci pracovního listu: učitel žáky nejprve ke slovníčku NAVIGUJE a významy projde společně.")
     doc.add_paragraph("3) Čtení textu – žáci se vrátí do textu, čtou (samostatně / po odstavcích), podtrhují klíčové informace.")
     doc.add_paragraph("4) Otázky A/B/C – nejprve A (vyhledání), potom B (interpretace), nakonec C (vlastní názor).")
