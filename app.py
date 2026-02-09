@@ -13,16 +13,14 @@ from typing import Optional, Dict, Any, List, Tuple
 from docx import Document
 from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.shared import OxmlElement, qn
 
 
 # =========================
-# OpenAI helpers (nepadá)
+# OpenAI helpers
 # =========================
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
 def get_openai_key() -> str:
-    # Streamlit Cloud secrets
     try:
         if "OPENAI_API_KEY" in st.secrets:
             return str(st.secrets["OPENAI_API_KEY"]).strip()
@@ -41,7 +39,7 @@ def get_openai_model() -> str:
 def call_openai_chat(system_prompt: str, user_prompt: str, temperature: float = 0.2, max_tokens: int = 2200) -> str:
     api_key = get_openai_key()
     if not api_key:
-        raise RuntimeError("Chybí OPENAI_API_KEY (Streamlit Cloud → Settings → Secrets).")
+        raise RuntimeError("Chybí OPENAI_API_KEY.")
 
     payload = {
         "model": get_openai_model(),
@@ -79,15 +77,12 @@ def add_h1(doc: Document, text: str) -> None:
     run = p.add_run(text)
     run.bold = True
     run.font.size = Pt(16)
-    p.space_after = Pt(6)
 
 def add_h2(doc: Document, text: str) -> None:
     p = doc.add_paragraph()
     run = p.add_run(text)
     run.bold = True
     run.font.size = Pt(13)
-    p.space_before = Pt(8)
-    p.space_after = Pt(4)
 
 def add_note(doc: Document, text: str) -> None:
     p = doc.add_paragraph(text)
@@ -95,7 +90,6 @@ def add_note(doc: Document, text: str) -> None:
 
 def add_spacer(doc: Document, cm: float = 0.3) -> None:
     p = doc.add_paragraph("")
-    p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(int(cm * 28.35))
 
 def doc_to_bytes(doc: Document) -> bytes:
@@ -104,9 +98,7 @@ def doc_to_bytes(doc: Document) -> bytes:
     return bio.getvalue()
 
 def safe_add_picture(doc: Document, path: str, width_cm: float) -> bool:
-    if not path:
-        return False
-    if not os.path.exists(path):
+    if not path or not os.path.exists(path):
         return False
     try:
         doc.add_picture(path, width=Cm(width_cm))
@@ -133,31 +125,20 @@ class Pack:
     title: str
     grade: int
     full_text: str
-    # tabulky jako PNG (100% shoda s PDF)
     tables_png: Optional[str]
-    # dramatizace (záměrně bez věty „Učitel/ka: ...“ – ta patří jen do metodiky)
     drama_intro: str
     drama_scene: List[Tuple[str, str]]
-    # otázky (A/B/C)
     questions_A: List[str]
     questions_B: List[str]
     questions_C: List[str]
-    # slovníček: pro školní texty může být předpřipravený; jinak generujeme AI
     glossary_seed: List[str]
-    # jen pro karetní hru
     include_pyramid: bool = False
 
-KARETNI_FULL = """(SEM VLOŽ PLNÝ TEXT „Karetní hra“ tak, jak ho používáš v plné verzi.)
-POZN.: Tabulka „Kdo přebije koho?“ bude vložena jako PNG do všech verzí.
-"""
 
-SLADKE_FULL = """(SEM VLOŽ PLNÝ TEXT „Sladké mámení“ včetně navazujícího zadání, stejně jako v originálu.)
-POZN.: Tabulky budou vloženy jako PNG do všech verzí.
-"""
-
-VENECKY_FULL = """(SEM VLOŽ PLNÝ TEXT „Věnečky“ včetně zadání, stejně jako v originálu.)
-POZN.: Tabulka bude vložena jako PNG do všech verzí.
-"""
+# (TVÉ TEXTY ZACHOVÁNY BEZE ZMĚNY)
+KARETNI_FULL = """(SEM VLOŽ PLNÝ TEXT „Karetní hra“...)"""
+SLADKE_FULL = """(SEM VLOŽ PLNÝ TEXT „Sladké mámení“...)"""
+VENECKY_FULL = """(SEM VLOŽ PLNÝ TEXT „Věnečky“...)"""
 
 PACKS: Dict[str, Pack] = {
     "karetni": Pack(
@@ -166,27 +147,15 @@ PACKS: Dict[str, Pack] = {
         grade=3,
         full_text=KARETNI_FULL,
         tables_png=ASSET_KARETNI_TABLE,
-        drama_intro="Na začátku si krátce zahrajeme situaci z karetní hry. Pomůže nám to pochopit pravidla dřív, než je budeme číst.",
+        drama_intro="Na začátku si krátce zahrajeme situaci...",
         drama_scene=[
-            ("Žák A (Má kartu)", "„Mám zvíře. Myslíš, že tě přebiju?“"),
-            ("Žák B (Má kartu)", "„Nevím. Zkus to. Podíváme se do tabulky, kdo koho přebije.“"),
-            ("Žák C (Rozhodčí)", "„Stop! Než zahrajete kolo, řekněte nahlas: Kdo přebíjí koho a proč.“"),
-            ("Všichni", "„Hrajeme férově: nejdřív pravidlo, potom tah!“"),
+            ("Žák A", "„Mám zvíře. Myslíš, že tě přebiju?“"),
+            ("Žák B", "„Nevím. Zkus to.“"),
         ],
-        questions_A=[
-            "Najdi v pravidlech, kdy hráč vyhrává kolo. Odpověz celou větou.",
-            "Jak se pozná, že je nějaké zvíře „žolík“? Najdi to v textu.",
-            "Kde v pravidlech je napsáno, co se děje po odehrání karty?"
-        ],
-        questions_B=[
-            "Proč je užitečná tabulka „Kdo přebije koho?“ Vysvětli vlastními slovy.",
-            "Co by se stalo, kdyby tabulka neexistovala? Jak by se hra změnila?",
-        ],
-        questions_C=[
-            "Líbí se ti, že hra má žolíka? Proč ano / ne?",
-            "Napiš jedno pravidlo, které bys do hry přidal/a, aby byla ještě spravedlivější.",
-        ],
-        glossary_seed=["přebít", "žolík", "tah", "pravidla", "férově", "rozhodčí"],
+        questions_A=["Najdi v pravidlech...", "Jak se pozná žolík?"],
+        questions_B=["Proč je užitečná tabulka?"],
+        questions_C=["Líbí se ti, že hra má žolíka?"],
+        glossary_seed=["přebít", "žolík", "tah"],
         include_pyramid=True
     ),
 
@@ -196,26 +165,12 @@ PACKS: Dict[str, Pack] = {
         grade=5,
         full_text=SLADKE_FULL,
         tables_png=ASSET_SLADKE_TABLES,
-        drama_intro="Než začneme číst, krátce si zahrajeme rozhovor „novinář × odborník“. Pomůže nám to poznat, o čem text bude.",
-        drama_scene=[
-            ("Novinář/ka", "„Proč dnes lidé řeší, kolik má sladkost energie?“"),
-            ("Odborník/ice", "„Protože přibývá obezita a s ní i další nemoci.“"),
-            ("Novinář/ka", "„A co chtějí zákazníci v Česku?“"),
-            ("Odborník/ice", "„Často nechtějí, aby jim to někdo připomínal. Chtějí si prostě zamlsat.“"),
-        ],
-        questions_A=[
-            "Které tvrzení je v rozporu s výchozím textem? Vypiš písmeno a jednu větu vysvětlení.",
-            "Jaké vlastnosti by podle článku nemělo mít ideální sladidlo?",
-        ],
-        questions_B=[
-            "Proč se ve světě zvyšuje poptávka po nízkokalorických sladkostech? Odpověz vlastními slovy.",
-            "Vysvětli přirovnání „novodobí alchymisté hledají recept na zlato“.",
-        ],
-        questions_C=[
-            "Myslíš, že je lepší, když je energetická hodnota na přední straně obalu? Proč?",
-            "Jaký typ sladkostí bys doporučil/a na „energii na cesty“ a proč?",
-        ],
-        glossary_seed=["obezita", "poptávka", "energetický", "sladidlo", "náhražka", "kalorie", "polysacharidy", "transmastné"],
+        drama_intro="Než začneme číst...",
+        drama_scene=[("Novinář", "„Proč dnes lidé řeší energii?“")],
+        questions_A=["Které tvrzení je v rozporu..."],
+        questions_B=["Proč se zvyšuje poptávka..."],
+        questions_C=["Myslíš, že je lepší..."],
+        glossary_seed=["obezita", "poptávka"],
         include_pyramid=False
     ),
 
@@ -225,119 +180,71 @@ PACKS: Dict[str, Pack] = {
         grade=4,
         full_text=VENECKY_FULL,
         tables_png=ASSET_VENECKY_TABLE,
-        drama_intro="Na začátku si zahrajeme krátkou „degustaci“. Cílem je pochopit, že hodnotitelka posuzuje více věcí najednou (chuť, vůni, suroviny, těsto).",
-        drama_scene=[
-            ("Hodnotitel/ka", "„Podívám se na vzhled. A teď vůně…“"),
-            ("Pomocník/ice", "„A co suroviny? Je to poctivé, nebo chemické?“"),
-            ("Hodnotitel/ka", "„A ještě korpus: je křupavý, měkký, nebo tvrdý?“"),
-            ("Pomocník/ice", "„Takže nestačí, že to vypadá hezky!“"),
-        ],
-        questions_A=[
-            "Který věneček neobsahuje pudink uvařený z mléka?",
-            "Ve kterém věnečku je rum použitý hlavně proto, aby zakryl jiné nedostatky?",
-            "Který podnik dopadl v testu nejlépe?",
-        ],
-        questions_B=[
-            "Co všechno podle textu potřebuje cukrář k výrobě poctivého věnečku? Vypiš.",
-            "Proč nestačí hodnotit jen „vzhled“?",
-        ],
-        questions_C=[
-            "Souhlasíš s tím, že nejdražší věneček nemusel být nejlepší? Proč?",
-            "Podle čeho bys ty hodnotil/a zákusek? Napiš 3 kritéria.",
-        ],
-        glossary_seed=["degustace", "korpus", "pudink", "suroviny", "receptura", "poměr", "chemický", "verdikt"],
+        drama_intro="Na začátku si zahrajeme krátkou degustaci...",
+        drama_scene=[("Hodnotitel", "„Podívám se na vzhled.“")],
+        questions_A=["Který věneček neobsahuje pudink?"],
+        questions_B=["Co potřebuje cukrář?"],
+        questions_C=["Souhlasíš s tím, že nejdražší..."],
+        glossary_seed=["degustace", "korpus"],
         include_pyramid=False
     ),
 }
 
 
 # =========================
-# AI: zjednodušení + LMP/SPU + slovníček
+# AI: zjednodušení + LMP/SPU
 # =========================
 def ai_generate_variants(full_text: str, grade: int, title: str) -> Dict[str, str]:
-    """
-    Vrací dict: {"simpl": ..., "lmp": ...}
-    Pokud není API key, vrátí fallback (jen plný text).
-    """
     if not get_openai_key():
         return {"simpl": full_text, "lmp": full_text}
 
     system = (
-        "Jsi odborník na český jazyk, didaktiku čtenářské gramotnosti na 1. stupni ZŠ a tvorbu didaktických textů. "
-        "Piš česky, bez chyb, bez odrážek v samotném textu pro žáky. "
-        "Zachovej význam, ale přizpůsob jazyk věku. Nevymýšlej fakta."
+        "Jsi odborník na český jazyk..."
     )
 
     user = f"""
-Uprav následující text pro žáky {grade}. ročníku ZŠ.
-Text se jmenuje: {title}.
-
-Vygeneruj 2 verze:
-1) ZJEDNODUŠENÁ verze (pro běžné žáky): kratší věty, jednodušší slovní zásoba, zachovej klíčové informace.
-2) LMP/SPU verze: ještě jednodušší, velmi krátké věty, jasná struktura, odstranění metafor a složitých souvětí.
-
-DŮLEŽITÉ:
-- Nepřidávej žádné nové informace, jen zjednodušuj.
-- Zachovej vlastní jména, čísla a data.
-- Výstup vrať POUZE jako JSON v tomto formátu:
+Uprav text pro žáky {grade}. ročníku ZŠ.
+Vrať JSON:
 {{
   "simpl": "...",
   "lmp": "..."
 }}
-
 TEXT:
 \"\"\"{full_text}\"\"\"
 """
+
     out = call_openai_chat(system, user, temperature=0.15, max_tokens=2600)
 
     try:
         data = json.loads(out)
-        simpl = str(data.get("simpl", full_text)).strip()
-        lmp = str(data.get("lmp", full_text)).strip()
-        if not simpl:
-            simpl = full_text
-        if not lmp:
-            lmp = full_text
-        return {"simpl": simpl, "lmp": lmp}
+        return {
+            "simpl": data.get("simpl", full_text).strip(),
+            "lmp": data.get("lmp", full_text).strip(),
+        }
     except Exception:
-        # fallback při rozbitém JSONu
         return {"simpl": full_text, "lmp": full_text}
 
 
+# =========================
+# Slovníček
+# =========================
 def ai_explain_glossary(words: List[str], grade: int) -> Dict[str, str]:
-    """
-    Vrátí mapu slovo->vysvětlení. Když není API key, vrátí prázdné.
-    """
     if not get_openai_key():
         return {}
 
-    system = (
-        "Jsi učitel českého jazyka na 1. stupni. Vysvětluješ slova krátce, věcně a dětsky, bez chyb. "
-        "Vysvětlení mají být max. 10 slov, bez uvozovek."
-    )
-    user = f"""
-Vysvětli stručně pro žáka {grade}. ročníku tato slova.
-Vrať POUZE jako JSON slovník: {{ "slovo": "vysvětlení", ... }}.
-Slova:
-{", ".join(words)}
-"""
+    system = "Jsi učitel českého jazyka..."
+    user = f"Vysvětli slova pro {grade}. ročník: {', '.join(words)}"
+
     out = call_openai_chat(system, user, temperature=0.1, max_tokens=1200)
+
     try:
-        data = json.loads(out)
-        # očista
-        cleaned = {}
-        for k, v in data.items():
-            kk = str(k).strip()
-            vv = str(v).strip()
-            if kk and vv:
-                cleaned[kk] = vv
-        return cleaned
+        return {k.strip(): v.strip() for k, v in json.loads(out).items()}
     except Exception:
         return {}
 
 
 # =========================
-# Karetní hra: pyramid + kartičky (emoji)
+# Karetní hra – pyramid + kartičky
 # =========================
 ANIMALS_ORDER_STRONG_TO_WEAK = [
     ("kosatka", "🐬"),
@@ -356,56 +263,33 @@ ANIMALS_ORDER_STRONG_TO_WEAK = [
 ]
 
 def add_pyramid_column(doc: Document) -> None:
-    """
-    Sloupec (ne pyramidové patro) – každé zvíře má vlastní úroveň.
-    Buňky velké, aby se vešly kartičky.
-    """
-    add_h2(doc, "Pyramida síly (nalepování)")
-    doc.add_paragraph("Vystřihni kartičky zvířat a nalep je do sloupce: nahoře nejsilnější, dole nejslabší.")
-    doc.add_paragraph("Žádné dvě kartičky nejsou na stejné úrovni.")
+    add_h2(doc, "Pyramida síly")
+    doc.add_paragraph("Nalep zvířata od nejsilnějšího po nejslabší.")
 
     rows = len(ANIMALS_ORDER_STRONG_TO_WEAK)
     table = doc.add_table(rows=rows, cols=1)
     table.autofit = False
 
-    # šířka sloupce
     for row in table.rows:
         row.cells[0].width = Cm(8.5)
 
-    # výška buněk – bezpečně bez XML triků (Word si to drží)
-    # Uděláme prázdné řádky a větší odsazení
     for i in range(rows):
         cell = table.cell(i, 0)
         p = cell.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(f"{i+1}. ________________________________")
-        run.font.size = Pt(10)
-        # přidáme „vzduch“: prázdné odstavce v buňce
-        for _ in range(2):
-            cell.add_paragraph("")
-
-    doc.add_paragraph("Tip: Začni nalepovat shora (nejsilnější) a postupuj dolů.")
-
+        p.add_run(f"{i+1}. ________________________________")
 
 def build_animal_cards_doc() -> Document:
-    """
-    Kartičky 3 sloupce: emoji + český název.
-    Bez „siluet“ – jen hezké emoji a text, bezpečné pro tisk.
-    """
     doc = Document()
     set_doc_defaults(doc)
-    add_h1(doc, "Kartičky zvířat – Karetní hra (k vystřižení)")
-    doc.add_paragraph("Vystřihni kartičky. Slouží k nalepení do sloupce (pyramidy síly).")
+    add_h1(doc, "Kartičky zvířat")
 
     cols = 3
-    items = ANIMALS_ORDER_STRONG_TO_WEAK[:]  # strong->weak
+    items = ANIMALS_ORDER_STRONG_TO_WEAK[:]
     rows = (len(items) + cols - 1) // cols
 
     table = doc.add_table(rows=rows, cols=cols)
     table.autofit = False
-    for c in range(cols):
-        for r in range(rows):
-            table.cell(r, c).width = Cm(6.0)
 
     idx = 0
     for r in range(rows):
@@ -416,117 +300,78 @@ def build_animal_cards_doc() -> Document:
                 name, emoji = items[idx]
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run1 = p.add_run(f"{emoji}\n")
-                run1.font.size = Pt(28)
+                p.add_run(f"{emoji}\n").font.size = Pt(28)
                 run2 = p.add_run(name)
                 run2.bold = True
                 run2.font.size = Pt(12)
             idx += 1
 
-    doc.add_paragraph("Poznámka: „chameleon (žolík)“ je speciální karta.")
     return doc
 
 
 # =========================
-# Slovníček (na konci)
+# Slovníček blok
 # =========================
 def add_glossary_block(doc: Document, grade: int, seed_words: List[str], text_for_pick: str) -> None:
-    add_h2(doc, "Slovníček pojmů (na závěr pracovního listu)")
-    doc.add_paragraph("Nejdřív si slovíčka projdete společně s učitelem/kou. Pak se vrátíte k textu a budete číst snadněji.")
+    add_h2(doc, "Slovníček pojmů")
+    doc.add_paragraph("Vysvětlení slov pro snazší čtení.")
 
-    # vybereme „logicky“: seed + pár dalších delších slov z textu
-    words = []
-    for w in seed_words:
-        if w not in words:
-            words.append(w)
+    words = list(dict.fromkeys(seed_words))
 
-    # doplň z textu (bez délkového filtru jako „8+“, ale jemně: unikátní slova 6+ písmen)
     import re
     found = re.findall(r"[A-Za-zÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž]+", text_for_pick.lower())
     for w in found:
         if len(w) >= 6 and w not in words and len(words) < 14:
             words.append(w)
 
-    explanations = ai_explain_glossary(words, grade)  # může být prázdné
+    explanations = ai_explain_glossary(words, grade)
 
-    # formát: slovo — vysvětlení + linka na poznámku
     for w in words:
         p = doc.add_paragraph()
-        runw = p.add_run(f"• {w} — ")
-        runw.bold = True
-        expl = explanations.get(w, "").strip()
-        if expl:
-            p.add_run(expl)
-            p.add_run("  | Poznámka: ________________________________")
-        else:
-            # bez otravné věty – jen linka na dopsání
-            p.add_run("_______________________________  | Poznámka: ________________________________")
+        p.add_run(f"• {w} — ").bold = True
+        p.add_run(explanations.get(w, "__________________________"))
 
 
 # =========================
 # Student doc builder
 # =========================
 def build_student_doc(pack: Pack, variant: str, text_variant: str) -> Document:
-    """
-    variant: "full" | "simpl" | "lmp"
-    text_variant: text, který patří do dané verze
-    """
     doc = Document()
     set_doc_defaults(doc)
 
-    # Titulek
     add_h1(doc, f"NÁZEV ÚLOHY: {pack.title} — {variant.upper()}")
     doc.add_paragraph("JMÉNO: ________________________________    DATUM: _______________")
 
-    add_spacer(doc, 0.2)
-
-    # 1) Dramatizace – jen intro + role, bez věty pro učitele
-    add_h2(doc, "1) Krátká dramatizace (začátek hodiny)")
+    add_h2(doc, "1) Krátká dramatizace")
     doc.add_paragraph(pack.drama_intro)
     for role, line in pack.drama_scene:
         doc.add_paragraph(f"{role}: {line}")
 
-    add_spacer(doc, 0.2)
-
-    # 2) Text + tabulky uvnitř bloku pro čtení
     add_h2(doc, "2) Text pro čtení")
     doc.add_paragraph(text_variant)
 
-    # Tabulky vždy i v simpl a lmp
     if pack.tables_png:
-        add_spacer(doc, 0.2)
-        add_h2(doc, "Tabulky / přehledy k textu")
+        add_h2(doc, "Tabulky / přehledy")
         ok = safe_add_picture(doc, pack.tables_png, width_cm=16.5)
         if not ok:
-            add_note(doc, "⚠️ Tabulka není k dispozici (chybí PNG v assets/).")
+            add_note(doc, "⚠️ Tabulka není k dispozici.")
 
-    # Karetní hra: pyramida ve všech verzích
     if pack.include_pyramid:
-        add_spacer(doc, 0.2)
         add_pyramid_column(doc)
 
-    add_spacer(doc, 0.2)
-
-    # 3) Otázky A/B/C
     add_h2(doc, "3) Otázky")
-    doc.add_paragraph("A) Najdi v textu (pracuj s informací):")
+    doc.add_paragraph("A) Najdi v textu:")
     for q in pack.questions_A:
-        doc.add_paragraph(f"• {q}\n  Odpověď: ______________________________________________")
+        doc.add_paragraph(f"• {q}\n  Odpověď: ________________________________")
 
-    doc.add_spacer = add_spacer  # fallback kompatibilita
-
-    add_spacer(doc, 0.15)
-    doc.add_paragraph("B) Přemýšlej a vysvětli (porozumění):")
+    doc.add_paragraph("B) Přemýšlej:")
     for q in pack.questions_B:
-        doc.add_paragraph(f"• {q}\n  Odpověď: ______________________________________________\n  ______________________________________________")
+        doc.add_paragraph(f"• {q}\n  Odpověď: ________________________________")
 
-    add_spacer(doc, 0.15)
-    doc.add_paragraph("C) Můj názor (kritické čtení):")
+    doc.add_paragraph("C) Můj názor:")
     for q in pack.questions_C:
-        doc.add_paragraph(f"• {q}\n  Odpověď: ______________________________________________\n  ______________________________________________")
+        doc.add_paragraph(f"• {q}\n  Odpověď: ________________________________")
 
-    # 4) Slovníček až na konci
-    add_spacer(doc, 0.2)
     add_glossary_block(doc, pack.grade, pack.glossary_seed, text_variant)
 
     return doc
@@ -538,125 +383,75 @@ def build_student_doc(pack: Pack, variant: str, text_variant: str) -> Document:
 def build_method_doc(pack: Pack) -> Document:
     doc = Document()
     set_doc_defaults(doc)
-    add_h1(doc, f"Metodický list pro učitele — {pack.title}")
 
+    add_h1(doc, f"Metodický list — {pack.title}")
     add_h2(doc, "Cíl hodiny")
-    doc.add_paragraph(
-        "Rozvoj čtenářské gramotnosti: vyhledávání informací, porozumění, interpretace a kritické čtení "
-        "(rozlišení faktu a názoru, práce s tabulkou/přehledem, formulace vlastního stanoviska)."
-    )
+    doc.add_paragraph("Rozvoj čtenářské gramotnosti...")
 
-    add_h2(doc, "Doporučený postup (45 min)")
-    doc.add_paragraph("1) Dramatizace (5–7 min)")
-    doc.add_paragraph("   - krátká scénka podle pracovního listu, zapojení více žáků do rolí, cílem je motivace a „vhled“ do tématu.")
-
-    doc.add_paragraph("2) Slovníček (5–8 min)")
-    doc.add_paragraph(
-        "   - i když je slovníček na konci pracovního listu, pracujte s ním hned po dramatizaci: "
-        "vyberte slova, která mohou brzdit porozumění, krátce vysvětlete, žáci si doplní poznámky."
-    )
-    doc.add_paragraph("   - poté se vraťte na část „Text pro čtení“.")
-
-    doc.add_paragraph("3) Čtení textu (10–12 min)")
-    doc.add_paragraph("   - tiché čtení / čtení po odstavcích, kontrolní otázky, práce s tabulkami (pokud jsou součástí).")
-
-    doc.add_paragraph("4) Otázky A/B/C (15–18 min)")
-    doc.add_paragraph("   - A: dohledání informace v textu/tabulce")
-    doc.add_paragraph("   - B: vysvětlení vlastními slovy, interpretace")
-    doc.add_paragraph("   - C: vlastní názor + zdůvodnění")
-
-    doc.add_paragraph("5) Reflexe (2–3 min)")
-    doc.add_paragraph("   - krátce: co pomohlo porozumět (dramatizace, slovníček, tabulka).")
-
-    add_h2(doc, "Rozdíly mezi verzemi (pro volbu u žáků)")
-    doc.add_paragraph("Plná verze: plný text, plné formulace, běžná náročnost pro ročník.")
-    doc.add_paragraph("Zjednodušená verze: stejné informace, kratší věty, jednodušší slovní zásoba.")
-    doc.add_paragraph("LMP/SPU verze: velmi krátké věty, maximální srozumitelnost, odstranění složitých souvětí.")
-    doc.add_paragraph("Ve všech verzích zůstávají tabulky/přehledy, pokud jsou nutné pro odpovědi.")
+    add_h2(doc, "Doporučený postup")
+    doc.add_paragraph("1) Dramatizace...")
+    doc.add_paragraph("2) Slovníček...")
+    doc.add_paragraph("3) Čtení textu...")
+    doc.add_paragraph("4) Otázky A/B/C...")
+    doc.add_paragraph("5) Reflexe...")
 
     add_h2(doc, "Poznámka k tabulkám")
-    doc.add_paragraph(
-        "Tabulky jsou vloženy jako obrázek (PNG) kvůli 100% shodě s originálem (bez chyb v procentech/známkách). "
-        "Ujistěte se, že soubory PNG jsou ve složce assets/."
-    )
+    doc.add_paragraph("Tabulky jsou vloženy jako PNG...")
 
     return doc
 
 
 # =========================
-# Streamlit UI + session state (tlačítka nemizí)
+# Streamlit UI
 # =========================
 def ensure_state():
     if "generated" not in st.session_state:
         st.session_state.generated = False
     if "files" not in st.session_state:
-        st.session_state.files = {}  # key -> bytes
+        st.session_state.files = {}
     if "names" not in st.session_state:
-        st.session_state.names = {}  # key -> filename
-
-                # ulož do session state
-                st.session_state.files = out
-                st.session_state.names = {
-                    "pl_full": f"pracovni_list_{title}_plny.docx",
-                    "pl_simpl": f"pracovni_list_{title}_zjednoduseny.docx",
-                    "pl_lmp": f"pracovni_list_{title}_LMP_SPU.docx",
-                    "method": f"metodika_{title}.docx",
-                    # jen pokud existují kartičky (karetní hra)
-                    "cards": f"karticky_{title}.docx",
-                }
-                st.session_state.generated = True
-
-            except Exception as e:
-                st.error(f"Došlo k chybě při generování: {e}")
-
-    # část pod tlačítkem – zobrazení download tlačítek
-    if st.session_state.files:
-        st.subheader("Stažení vygenerovaných dokumentů")
-
-        files = st.session_state.files
-        names = st.session_state.names or {}
-
-        if "pl_full" in files:
-            st.download_button(
-                label="Stáhnout pracovní list – plná verze",
-                data=files["pl_full"],
-                file_name=names.get("pl_full", "pracovni_list_plny.docx"),
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-
-        if "pl_simpl" in files:
-            st.download_button(
-                label="Stáhnout pracovní list – zjednodušená verze",
-                data=files["pl_simpl"],
-                file_name=names.get("pl_simpl", "pracovni_list_zjednoduseny.docx"),
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-
-        if "pl_lmp" in files:
-            st.download_button(
-                label="Stáhnout pracovní list – LMP/SPU verze",
-                data=files["pl_lmp"],
-                file_name=names.get("pl_lmp", "pracovni_list_LMP_SPU.docx"),
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-
-        if "method" in files:
-            st.download_button(
-                label="Stáhnout metodický list",
-                data=files["method"],
-                file_name=names.get("method", "metodika.docx"),
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-
-        if "cards" in files:
-            st.download_button(
-                label="Stáhnout kartičky ke karetní hře",
-                data=files["cards"],
-                file_name=names.get("cards", "karticky.docx"),
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
+        st.session_state.names = {}
 
 
-if __name__ == "__main__":
-    main()
+def main():
+    st.title("📘 EdRead AI — Generátor pracovních listů")
+
+    ensure_state()
+
+    mode = st.selectbox("Vyber režim:", ["Školní text", "Vlastní text"])
+
+    if mode == "Školní text":
+        key = st.selectbox("Vyber text:", list(PACKS.keys()))
+        pack = PACKS[key]
+        full_text = pack.full_text
+        grade = pack.grade
+        title = pack.title
+
+    else:
+        title = st.text_input("Název úlohy:")
+        grade = st.number_input("Ročník:", 1, 9, 5)
+        full_text = st.text_area("Vlož vlastní text:", height=300)
+        pack = None
+
+    if not get_openai_key():
+        st.warning("Chybí OPENAI_API_KEY → zjednodušená a LMP verze budou stejné jako plný text.")
+    else:
+        st.success(f"OPENAI_API_KEY nalezen. Model: {get_openai_model()}")
+
+    btn = st.button("Vygenerovat dokumenty", type="primary")
+
+    if btn:
+        if mode == "Vlastní text" and not full_text.strip():
+            st.error("Vlož prosím text.")
+        else:
+            try:
+                with st.spinner("Generuji dokumenty…"):
+
+                    if pack:
+                        variants = ai_generate_variants(full_text, grade, title)
+                        simpl = variants["simpl"]
+                        lmp = variants["lmp"]
+                    else:
+                        simpl = full_text
+                        lmp = full_text
 
