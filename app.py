@@ -75,44 +75,21 @@ PYRAMID_ORDER = [
 import os
 import streamlit as st
 
-def get_openai_key():
-    # 1) Streamlit secrets (Streamlit Cloud)
+def get_openai_key() -> str:
+    # Streamlit Cloud secrets
     if "OPENAI_API_KEY" in st.secrets:
-        return st.secrets["OPENAI_API_KEY"]
-    # 2) Lokální prostředí / jiné hostování
-    return os.getenv("OPENAI_API_KEY", "")
+        return str(st.secrets["OPENAI_API_KEY"]).strip()
+    # lokální / jiné hostování
+    return (os.getenv("OPENAI_API_KEY") or "").strip()
 
-
-
-def call_openai_chat(system: str, user: str, temperature: float = 0.2) -> str:
+def get_openai_model() -> str:
     """
-    Minimální a stabilní volání OpenAI Chat Completions přes HTTP.
+    Model je konfigurovatelný přes Streamlit secrets nebo ENV.
+    Když není nastaven, použije se rozumný default.
     """
-    import requests
-
-    api_key = get_openai_key()
-    if not api_key:
-        raise RuntimeError("Chybí OPENAI_API_KEY (Streamlit Secrets nebo env).")
-
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": get_openai_model(),
-        "temperature": temperature,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-    }
-
-    r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
-    r.raise_for_status()
-    data = r.json()
-    return data["choices"][0]["message"]["content"]
-
+    if "OPENAI_MODEL" in st.secrets:
+        return str(st.secrets["OPENAI_MODEL"]).strip()
+    return (os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
 
 # =========================
 # Textové nástroje
@@ -610,4 +587,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
