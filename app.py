@@ -599,127 +599,6 @@ def ensure_state():
     if "names" not in st.session_state:
         st.session_state.names = {}  # key -> filename
 
-def generate_all(pack: Pack, full_text: str, grade: int, title: str):
-    # Variants from AI (or fallback)
-    variants = ai_generate_variants(full_text, grade, title)
-    text_full = full_text
-    text_simpl = variants.get("simpl", full_text)
-    text_lmp = variants.get("lmp", full_text)
-
-    # update pack meta for custom
-    pack2 = Pack(
-        key=pack.key,
-        title=title,
-        grade=grade,
-        full_text=full_text,
-        tables_png=pack.tables_png,
-        drama_intro=pack.drama_intro,
-        drama_scene=pack.drama_scene,
-        questions_A=pack.questions_A,
-        questions_B=pack.questions_B,
-        questions_C=pack.questions_C,
-        glossary_seed=pack.glossary_seed,
-        include_pyramid=pack.include_pyramid
-    )
-
-    # student docs
-    doc_full = build_student_doc(pack2, "full", text_full)
-    doc_simpl = build_student_doc(pack2, "simpl", text_simpl)
-    doc_lmp = build_student_doc(pack2, "lmp", text_lmp)
-
-    # method
-    doc_method = build_method_doc(pack2)
-
-    out = {
-        "pl_full": doc_to_bytes(doc_full),
-        "pl_simpl": doc_to_bytes(doc_simpl),
-        "pl_lmp": doc_to_bytes(doc_lmp),
-        "method": doc_to_bytes(doc_method),
-    }
-
-    # Karetní hra: kartičky extra
-    if pack2.include_pyramid:
-        cards_doc = build_animal_cards_doc()
-        out["cards"] = doc_to_bytes(cards_doc)
-
-    return out
-
-
-def main():
-    st.set_page_config(page_title="EdRead AI", layout="centered")
-    ensure_state()
-
-    st.title("EdRead AI — generátor pracovních listů (pro diplomku)")
-
-    st.markdown(
-        "Vyberte jeden z připravených textů (Karetní hra / Sladké mámení / Věnečky) nebo vložte vlastní text. "
-        "Aplikace vygeneruje: **plnou verzi**, **zjednodušenou verzi**, **LMP/SPU verzi** a **metodiku**."
-    )
-
-    mode = st.radio("Režim:", ["Připravené texty (3 úlohy)", "Vlastní text"], horizontal=True)
-
-    if mode == "Připravené texty (3 úlohy)":
-        choice = st.selectbox("Vyber úlohu:", [
-            ("Karetní hra (3. třída)", "karetni"),
-            ("Sladké mámení (5. třída)", "sladke"),
-            ("Věnečky (4. třída)", "venecky"),
-        ])
-        pack = PACKS[choice[1]]
-        title = pack.title
-        grade = pack.grade
-        full_text = pack.full_text
-
-        st.info("Pozn.: Ujisti se, že v app.py jsou vložené PLNÉ texty (ne jen zástupné).")
-
-    else:
-        title = st.text_input("Název úlohy:", value="Můj text")
-        grade = st.selectbox("Ročník:", [3, 4, 5], index=0)
-        full_text = st.text_area("Vlož plný text:", height=260)
-        pack = PACKS["sladke"]  # použijeme univerzální strukturu (bez pyramidy)
-        # pro vlastní text vypneme pyramidu i tabulky (pokud nechceš)
-        pack = Pack(
-            key="custom",
-            title=title,
-            grade=grade,
-            full_text=full_text,
-            tables_png=None,
-            drama_intro="Než začneme číst, zahrajeme krátkou scénku k tématu textu. Pomůže nám to naladit se na čtení.",
-            drama_scene=[
-                ("Žák/yně 1", "„O čem asi ten text bude?“"),
-                ("Žák/yně 2", "„Zkusme najít klíčová slova.“"),
-                ("Žák/yně 3", "„A pak si to ověříme při čtení.“"),
-            ],
-            questions_A=[
-                "Najdi v textu jednu důležitou informaci a napiš ji celou větou.",
-                "Najdi v textu odpověď na otázku: Kdo? Co? Kdy? Kde? (vyber jednu).",
-            ],
-            questions_B=[
-                "Vysvětli vlastními slovy, co je hlavní myšlenka textu.",
-            ],
-            questions_C=[
-                "Souhlasíš s tím, co text říká? Proč ano / ne?",
-            ],
-            glossary_seed=["důležité", "informace", "význam", "myšlenka"],
-            include_pyramid=False
-        )
-
-    st.divider()
-
-    # Kontrola OpenAI klíče – jen upozornění, app funguje i bez (fallback)
-    if not get_openai_key():
-        st.warning("Chybí OPENAI_API_KEY → zjednodušená a LMP verze budou dočasně stejné jako plný text.")
-    else:
-        st.success(f"OPENAI_API_KEY nalezen. Model: {get_openai_model()}")
-
-    btn = st.button("Vygenerovat dokumenty", type="primary")
-    if btn:
-        if mode == "Vlastní text" and not full_text.strip():
-            st.error("Vlož prosím text.")
-        else:
-            try:
-                with st.spinner("Generuji dokumenty…"):
-                    out = generate_all(pack, full_text, int(grade), title)
-
                 # ulož do session state
                 st.session_state.files = out
                 st.session_state.names = {
@@ -727,4 +606,61 @@ def main():
                     "pl_simpl": f"pracovni_list_{title}_zjednoduseny.docx",
                     "pl_lmp": f"pracovni_list_{title}_LMP_SPU.docx",
                     "method": f"metodika_{title}.docx",
-                    "cards":
+                    # jen pokud existují kartičky (karetní hra)
+                    "cards": f"karticky_{title}.docx",
+                }
+                st.session_state.generated = True
+
+            except Exception as e:
+                st.error(f"Došlo k chybě při generování: {e}")
+
+    # část pod tlačítkem – zobrazení download tlačítek
+    if st.session_state.files:
+        st.subheader("Stažení vygenerovaných dokumentů")
+
+        files = st.session_state.files
+        names = st.session_state.names or {}
+
+        if "pl_full" in files:
+            st.download_button(
+                label="Stáhnout pracovní list – plná verze",
+                data=files["pl_full"],
+                file_name=names.get("pl_full", "pracovni_list_plny.docx"),
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
+        if "pl_simpl" in files:
+            st.download_button(
+                label="Stáhnout pracovní list – zjednodušená verze",
+                data=files["pl_simpl"],
+                file_name=names.get("pl_simpl", "pracovni_list_zjednoduseny.docx"),
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
+        if "pl_lmp" in files:
+            st.download_button(
+                label="Stáhnout pracovní list – LMP/SPU verze",
+                data=files["pl_lmp"],
+                file_name=names.get("pl_lmp", "pracovni_list_LMP_SPU.docx"),
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
+        if "method" in files:
+            st.download_button(
+                label="Stáhnout metodický list",
+                data=files["method"],
+                file_name=names.get("method", "metodika.docx"),
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
+        if "cards" in files:
+            st.download_button(
+                label="Stáhnout kartičky ke karetní hře",
+                data=files["cards"],
+                file_name=names.get("cards", "karticky.docx"),
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
+
+if __name__ == "__main__":
+    main()
