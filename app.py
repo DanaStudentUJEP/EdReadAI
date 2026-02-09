@@ -72,27 +72,16 @@ PYRAMID_ORDER = [
 # OpenAI volání (bez SDK, přes requests)
 # =========================
 
-def get_openai_key() -> Optional[str]:
-    # Streamlit Cloud: Secrets / env
-    key = None
-    try:
-        key = st.secrets.get("OPENAI_API_KEY")
-    except Exception:
-        pass
-    if not key:
-        key = os.getenv("OPENAI_API_KEY")
-    return key
+import os
+import streamlit as st
 
+def get_openai_key():
+    # 1) Streamlit secrets (Streamlit Cloud)
+    if "OPENAI_API_KEY" in st.secrets:
+        return st.secrets["OPENAI_API_KEY"]
+    # 2) Lokální prostředí / jiné hostování
+    return os.getenv("OPENAI_API_KEY", "")
 
-def get_openai_model() -> str:
-    model = None
-    try:
-        model = st.secrets.get("OPENAI_MODEL")
-    except Exception:
-        pass
-    if not model:
-        model = os.getenv("OPENAI_MODEL")
-    return model or "gpt-4o-mini"
 
 
 def call_openai_chat(system: str, user: str, temperature: float = 0.2) -> str:
@@ -621,3 +610,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
