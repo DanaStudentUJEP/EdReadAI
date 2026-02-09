@@ -147,11 +147,6 @@ class Pack:
     # jen pro karetní hru
     include_pyramid: bool = False
 
-
-# Pozn.: plné texty si sem dej přesně – já tu držím kratší zástupné, aby soubor nebyl nekonečný.
-# Ve tvém projektu už ty texty máš; stačí je sem vložit (plná verze).
-# Pokud je nechceš duplikovat, můžeš je načítat ze souborů – ale teď dávám „samostatný app.py“.
-
 KARETNI_FULL = """(SEM VLOŽ PLNÝ TEXT „Karetní hra“ tak, jak ho používáš v plné verzi.)
 POZN.: Tabulka „Kdo přebije koho?“ bude vložena jako PNG do všech verzí.
 """
@@ -664,3 +659,4 @@ def ensure_state():
 
 if __name__ == "__main__":
     main()
+
